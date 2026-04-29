@@ -30,7 +30,7 @@ from app.schemas import (
     GenerateImageSuccessResponse,
 )
 from app.services.meta_generator import generate_meta
-from app.services.sections_generator import generate_new_sections, improve_section
+from app.services.sections_generator import generate_new_sections, improve_sections
 from app.services.reference_generator import generate_references
 from app.services.tasks_plan_generator import generate_tasks_plan
 from app.services.tasks_generator import generate_tasks
@@ -103,12 +103,12 @@ async def generate_sections_new_endpoint(request_data: GenerateSectionsRequest):
 
 
 @app.post(
-    "/generate/section/improve/",
+    "/generate/sections/improve/",
     response_model=Union[ImproveSectionSuccessResponse, ErrorResponse],
     dependencies=[Depends(verify_api_key)],
 )
-async def improve_section_endpoint(request_data: ImproveSectionRequest):
-    return await improve_section(request_data)
+async def improve_sections_endpoint(request_data: ImproveSectionRequest):
+    return await improve_sections(request_data)
 
 
 @app.post(

@@ -20,7 +20,7 @@ def build_new_sections_prompt(
         ),
         "rules": [
             "Return only valid JSON.",
-            "Generate 5-8 sections.",
+            "Generate 4-6 sections.",
             "Each section title must be 1-2 words.",
             "Sections must be suitable for an interactive lesson.",
             "Do not add explanations.",
@@ -41,29 +41,35 @@ def build_new_sections_prompt(
     return json.dumps(payload, ensure_ascii=False, indent=2)
 
 
-def build_improve_section_prompt(
+def build_improve_sections_prompt(
     user_request: str,
-    section_title: str,
+    sections: list[dict[str, str]],
     improvement_request: str,
     previous_error: Optional[str] = None,
 ) -> str:
     payload = {
         "user_request": user_request,
-        "current_section": {
-            "title": section_title,
-        },
+        "sections": sections,
         "improvement_request": improvement_request,
-        "task": "Improve the section title according to the user's request.",
+        "task": (
+            "Improve section titles according to the user's request. "
+            "Return improved interactive lesson sections."
+        ),
         "rules": [
             "Return only valid JSON.",
-            "The improved section title must be <= 40 characters.",
-            "The title must stay relevant to the lesson.",
+            "Generate 4-6 sections.",
+            "Each section title must be 1-2 words.",
+            "Each section title must be <= 40 characters.",
+            "Sections must be suitable for an interactive lesson.",
+            "Keep section order.",
             "Do not add explanations.",
         ],
         "response_schema": {
-            "section": {
-                "title": "string"
-            }
+            "sections": [
+                {
+                    "title": "string"
+                }
+            ]
         },
     }
 
@@ -84,6 +90,9 @@ def validate_sections_result(data: dict[str, Any]) -> tuple[bool, Optional[str],
     if not data["sections"]:
         return False, "sections cannot be empty", None
 
+    if len(data["sections"]) < 4 or len(data["sections"]) > 6:
+        return False, "sections must contain 4-6 items", None
+
     sections = []
 
     for item in data["sections"]:
@@ -96,29 +105,16 @@ def validate_sections_result(data: dict[str, Any]) -> tuple[bool, Optional[str],
             return False, "Each section must have non-empty title", None
 
         title = trim_topic_to_chars(title, max_chars=40)
+        words = [part for part in title.split() if part]
+
+        if len(words) < 1 or len(words) > 2:
+            return False, "Each section title must contain 1-2 words", None
 
         sections.append({
             "title": title,
         })
 
     return True, None, sections
-
-
-def validate_improved_section_result(data: dict[str, Any]) -> tuple[bool, Optional[str], Optional[dict[str, str]]]:
-    if "section" not in data:
-        return False, "Missing field: section", None
-
-    if not isinstance(data["section"], dict):
-        return False, "section must be an object", None
-
-    title = data["section"].get("title")
-
-    if not isinstance(title, str) or not title.strip():
-        return False, "section.title cannot be empty", None
-
-    return True, None, {
-        "title": trim_topic_to_chars(title, max_chars=40),
-    }
 
 
 async def generate_new_sections(request_data: GenerateSectionsRequest) -> dict[str, Any]:
@@ -155,7 +151,7 @@ async def generate_new_sections(request_data: GenerateSectionsRequest) -> dict[s
     }
 
 
-async def improve_section(request_data: ImproveSectionRequest) -> dict[str, Any]:
+async def improve_sections(request_data: ImproveSectionRequest) -> dict[str, Any]:
     settings = get_settings()
 
     user_request = trim_to_words_limit(request_data.user_request, max_words=1000)
@@ -163,13 +159,14 @@ async def improve_section(request_data: ImproveSectionRequest) -> dict[str, Any]
         request_data.improvement_request,
         max_words=300,
     )
+    source_sections = [section.model_dump() for section in request_data.sections]
 
     previous_error = None
 
     for _ in range(settings.MAX_GENERATION_ATTEMPTS):
-        prompt = build_improve_section_prompt(
+        prompt = build_improve_sections_prompt(
             user_request=user_request,
-            section_title=request_data.section.title,
+            sections=source_sections,
             improvement_request=improvement_request,
             previous_error=previous_error,
         )
@@ -180,17 +177,21 @@ async def improve_section(request_data: ImproveSectionRequest) -> dict[str, Any]
             previous_error = result["message"]
             continue
 
-        is_valid, error_message, section = validate_improved_section_result(result["data"])
+        is_valid, error_message, sections = validate_sections_result(result["data"])
 
-        if is_valid and section:
+        if is_valid and sections:
+            if len(sections) != len(source_sections):
+                previous_error = "sections count must match input sections count"
+                continue
+
             return {
                 "status": "ok",
-                "section": section,
+                "sections": sections,
             }
 
         previous_error = error_message
 
     return {
         "status": "error",
-        "message": previous_error or "Could not improve section",
+        "message": previous_error or "Could not improve sections",
     }

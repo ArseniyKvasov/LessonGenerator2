@@ -16,6 +16,8 @@ TASK_TYPES_AVAILABLE = [
     "image",
     "match_cards",
     "audio",
+    "speaking_cards",
+    "words_to_pronounce",
 ]
 
 

@@ -16,7 +16,9 @@ Available task types:
     "fill_gaps",
     "image",
     "match_cards",
-    "audio"
+    "audio",
+    "speaking_cards",
+    "words_to_pronounce"
 ]
 ```
 
@@ -24,7 +26,8 @@ Available task types:
 
 # 1. note
 
-Markdown + LaTeX content.
+Markdown + LaTeX content. `\n` is allowed for line breaks.  
+By default, explanations should be in Russian unless explicitly requested otherwise.
 
 ```json
 {
@@ -37,7 +40,7 @@ Markdown + LaTeX content.
 
 # 2. reading_text
 
-Markdown content.
+Markdown content. `\n` is allowed for line breaks.
 
 ```json
 {
@@ -50,7 +53,7 @@ Markdown content.
 
 # 3. word_list
 
-List of word pairs.
+List of `word/phrase -> Russian translation` pairs.
 
 ```json
 {
@@ -131,7 +134,7 @@ Statements with boolean answers.
 
 Text with gaps and a separate list of answers.
 
-Markdown + LaTeX is supported.
+Markdown + LaTeX is supported. `\n` is allowed for line breaks.
 
 - `text` — text with gaps marked as `___`
 - `answers` — list of correct answers in order
@@ -217,6 +220,45 @@ Audio script.
 
 ```json
 "monologue"
+```
+
+---
+
+# 10. speaking_cards
+
+Array of short speaking prompts.
+
+```json
+{
+    "type": "speaking_cards",
+    "speaking_cards": [
+        "Describe what you are doing right now.",
+        "Ask your partner 3 questions about their weekend.",
+        "Explain your morning routine in 4 sentences."
+    ]
+}
+```
+
+---
+
+# 11. words_to_pronounce
+
+Array of sound groups and words to pronounce.
+
+```json
+{
+    "type": "words_to_pronounce",
+    "words_to_pronounce": [
+        {
+            "sound": "/th/",
+            "words": ["think", "three", "thank"]
+        },
+        {
+            "sound": "/iː/",
+            "words": ["see", "green", "teacher"]
+        }
+    ]
+}
 ```
 
 or:

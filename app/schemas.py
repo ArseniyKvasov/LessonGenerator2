@@ -94,7 +94,7 @@ class GenerateSectionsRequest(BaseModel):
 
 class ImproveSectionRequest(BaseModel):
     user_request: str = Field(min_length=1)
-    section: SectionSchema
+    sections: list[SectionSchema] = Field(min_length=1)
     improvement_request: str = Field(min_length=1)
 
     @field_validator("user_request", "improvement_request")
@@ -115,7 +115,7 @@ class GenerateSectionsSuccessResponse(BaseModel):
 
 class ImproveSectionSuccessResponse(BaseModel):
     status: Literal["ok"] = "ok"
-    section: SectionSchema
+    sections: list[SectionSchema]
 
 
 class SectionReference(BaseModel):
@@ -171,6 +171,8 @@ TaskType = Literal[
     "image",
     "match_cards",
     "audio",
+    "speaking_cards",
+    "words_to_pronounce",
 ]
 
 
@@ -210,17 +212,32 @@ class GenerateTasksPlanSuccessResponse(BaseModel):
 
 class NoteTask(BaseModel):
     type: Literal["note"]
-    content: str = Field(min_length=1)
+    content: str = Field(
+        min_length=1,
+        description=(
+            "Explanation text in Russian by default (unless explicitly requested otherwise). "
+            "Supports Markdown, LaTeX and \\n for line breaks."
+        ),
+    )
 
 
 class ReadingTextTask(BaseModel):
     type: Literal["reading_text"]
-    content: str = Field(min_length=1)
+    content: str = Field(
+        min_length=1,
+        description="Reading text supports Markdown and \\n for line breaks.",
+    )
 
 
 class WordPair(BaseModel):
-    word: str = Field(min_length=1)
-    translation: str = Field(min_length=1)
+    word: str = Field(
+        min_length=1,
+        description="Word or phrase in source language.",
+    )
+    translation: str = Field(
+        min_length=1,
+        description="Russian translation for the word or phrase.",
+    )
 
 
 class WordListTask(BaseModel):
@@ -256,7 +273,10 @@ class TrueFalseTask(BaseModel):
 class FillGapsTask(BaseModel):
     type: Literal["fill_gaps"]
     mode: Literal["open", "closed"]
-    text: str = Field(min_length=1)
+    text: str = Field(
+        min_length=1,
+        description="Text with gaps marked as ___; supports Markdown, LaTeX and \\n for line breaks.",
+    )
     answers: list[str] = Field(min_length=1)
 
 
@@ -286,6 +306,21 @@ class AudioTask(BaseModel):
     script: list[AudioReplica] = Field(min_length=1)
 
 
+class SpeakingCardsTask(BaseModel):
+    type: Literal["speaking_cards"]
+    speaking_cards: list[str] = Field(min_length=3, max_length=20)
+
+
+class WordsToPronounceItem(BaseModel):
+    sound: str = Field(min_length=1)
+    words: list[str] = Field(min_length=1, max_length=20)
+
+
+class WordsToPronounceTask(BaseModel):
+    type: Literal["words_to_pronounce"]
+    words_to_pronounce: list[WordsToPronounceItem] = Field(min_length=1, max_length=12)
+
+
 GeneratedTask = Annotated[
     Union[
         NoteTask,
@@ -297,6 +332,8 @@ GeneratedTask = Annotated[
         ImageTask,
         MatchCardsTask,
         AudioTask,
+        SpeakingCardsTask,
+        WordsToPronounceTask,
     ],
     Field(discriminator="type"),
 ]

@@ -30,15 +30,17 @@ def build_tasks_prompt(
             "Keep the same section order.",
             "Keep the same task order inside each section.",
             "Use section reference to generate relevant content.",
-            "note.content supports Markdown + LaTeX.",
-            "reading_text.content supports Markdown.",
+            "note.content supports Markdown + LaTeX + \\n for line breaks.",
+            "By default, note explanations must be in Russian unless explicitly requested otherwise.",
+            "reading_text.content supports Markdown + \\n for line breaks.",
+            "word_list.pairs must be word/phrase -> Russian translation.",
             "test.questions must have 4-7 questions.",
             "test question supports Markdown + LaTeX.",
             "Each test question must have 2-4 options.",
             "Each test question must have exactly one correct option.",
             "true_or_false.statements must have 3-8 statements.",
             "true_or_false.statement supports Markdown + LaTeX.",
-            "fill_gaps.text supports Markdown + LaTeX.",
+            "fill_gaps.text supports Markdown + LaTeX + \\n for line breaks.",
             "fill_gaps.text must use ___ for every gap.",
             "fill_gaps.text must contain 4-10 gaps marked as ___.",
             "fill_gaps.answers must contain answers in the same order as gaps.",
@@ -49,22 +51,24 @@ def build_tasks_prompt(
             "audio.script must be an array of replicas with speaker and text.",
             "For monologue, use one replica with speaker Narrator.",
             "For dialogue, use at least 4 replicas and at least 2 speakers.",
+            "speaking_cards must return speaking_cards as an array of short prompts.",
+            "words_to_pronounce must return words_to_pronounce as an array of objects with sound and words.",
         ],
         "task_json_formats": {
             "note": {
                 "type": "note",
-                "content": "Markdown + LaTeX content",
+                "content": "Markdown + LaTeX content with \\n line breaks; Russian by default",
             },
             "reading_text": {
                 "type": "reading_text",
-                "content": "Markdown content",
+                "content": "Markdown content with \\n line breaks",
             },
             "word_list": {
                 "type": "word_list",
                 "pairs": [
                     {
-                        "word": "string",
-                        "translation": "string",
+                        "word": "word or phrase",
+                        "translation": "Russian translation",
                     }
                 ],
             },
@@ -94,7 +98,7 @@ def build_tasks_prompt(
             "fill_gaps": {
                 "type": "fill_gaps",
                 "mode": "open | closed",
-                "text": "Text with gaps marked as ___",
+                "text": "Text with \\n and gaps marked as ___",
                 "answers": ["answer 1", "answer 2"],
             },
             "image": {
@@ -117,6 +121,19 @@ def build_tasks_prompt(
                     {
                         "speaker": "string",
                         "text": "string",
+                    }
+                ],
+            },
+            "speaking_cards": {
+                "type": "speaking_cards",
+                "speaking_cards": ["string"],
+            },
+            "words_to_pronounce": {
+                "type": "words_to_pronounce",
+                "words_to_pronounce": [
+                    {
+                        "sound": "string",
+                        "words": ["string"],
                     }
                 ],
             },

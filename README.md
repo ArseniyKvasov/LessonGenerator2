@@ -81,7 +81,7 @@ X-API-Key: <your_api_key>
 - `GET /health/`
 - `POST /generate/meta/`
 - `POST /generate/sections/new/`
-- `POST /generate/section/improve/`
+- `POST /generate/sections/improve/`
 - `POST /generate/references/`
 - `POST /generate/tasks-plan/`
 - `POST /generate/tasks/`

@@ -114,18 +114,22 @@ Generates lesson sections.
 
 ---
 
-# 4. Improve Section
+# 4. Improve Sections
 
-### POST `/generate/section/improve/`
+### POST `/generate/sections/improve/`
 
-Improves section title.
+Improves section titles.
 
 #### Request
 
 ```json
 {
     "user_request": "Present Continuous lesson",
-    "section": { "title": "Form Basics" },
+    "sections": [
+        { "title": "Warm-up" },
+        { "title": "Form Basics" },
+        { "title": "Usage Rules" }
+    ],
     "improvement_request": "Make it more practical"
 }
 ```
@@ -135,7 +139,11 @@ Improves section title.
 ```json
 {
     "status": "ok",
-    "section": { "title": "Practical Forms" }
+    "sections": [
+        { "title": "Quick Start" },
+        { "title": "Practical Forms" },
+        { "title": "Real Usage" }
+    ]
 }
 ```
 
