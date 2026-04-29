@@ -1,6 +1,7 @@
+import logging
 from typing import Annotated, Union, Optional
 
-from fastapi import Depends, FastAPI, Header, HTTPException, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
 
 from app.config import get_settings
 from app.schemas import (
@@ -40,13 +41,36 @@ app = FastAPI(
     version="0.1.0",
 )
 
+logger = logging.getLogger(__name__)
+
+
+def _mask_key(value: Optional[str]) -> str:
+    if not value:
+        return "<missing>"
+    if len(value) <= 8:
+        return "*" * len(value)
+    return f"{value[:4]}...{value[-4:]}"
+
 
 def verify_api_key(
+        request: Request,
         x_api_key: Annotated[Optional[str], Header(alias="X-API-Key")] = None,
 ) -> None:
     settings = get_settings()
+    expected_key = settings.API_KEY
+    is_valid = bool(x_api_key and x_api_key == expected_key)
 
-    if not x_api_key or x_api_key != settings.API_KEY:
+    logger.info(
+        "API key check: valid=%s, client_host=%s, provided=%s (len=%s), expected=%s (len=%s)",
+        is_valid,
+        request.client.host if request.client else "<unknown>",
+        _mask_key(x_api_key),
+        len(x_api_key) if x_api_key else 0,
+        _mask_key(expected_key),
+        len(expected_key),
+    )
+
+    if not is_valid:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid API key",
