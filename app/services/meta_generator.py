@@ -83,7 +83,7 @@ def validate_meta_result(
     }
 
 
-def generate_meta(request_data: GenerateMetaRequest) -> dict[str, Any]:
+async def generate_meta(request_data: GenerateMetaRequest) -> dict[str, Any]:
     """
     Generates and validates metadata.
     If the generated result is invalid, tries to regenerate it.
@@ -100,7 +100,7 @@ def generate_meta(request_data: GenerateMetaRequest) -> dict[str, Any]:
             previous_error=previous_error,
         )
 
-        result = generate(prompt=prompt, model_type="light")
+        result = await generate(prompt=prompt, model_type="light")
 
         if result["status"] == "error":
             previous_error = result["message"]

@@ -1,7 +1,7 @@
 import base64
 from typing import Any, Optional
 
-import requests
+import httpx
 
 from app.config import get_settings
 
@@ -26,7 +26,7 @@ def check_file_size(file_bytes: bytes, file_type: str) -> Optional[dict[str, Any
     return None
 
 
-def generate_pollinations_image(
+async def generate_pollinations_image(
     prompt: str,
     size: str = "1024x1024",
     quality: str = "medium",
@@ -39,22 +39,22 @@ def generate_pollinations_image(
     settings = get_settings()
 
     try:
-        response = requests.post(
-            f"{POLLINATIONS_BASE_URL}/v1/images/generations",
-            headers={
-                "Authorization": f"Bearer {settings.POLLINATIONS_API_KEY}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": "flux",
-                "prompt": prompt,
-                "n": 1,
-                "size": size,
-                "quality": quality,
-                "response_format": response_format,
-            },
-            timeout=120,
-        )
+        async with httpx.AsyncClient(timeout=120) as client:
+            response = await client.post(
+                f"{POLLINATIONS_BASE_URL}/v1/images/generations",
+                headers={
+                    "Authorization": f"Bearer {settings.POLLINATIONS_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "flux",
+                    "prompt": prompt,
+                    "n": 1,
+                    "size": size,
+                    "quality": quality,
+                    "response_format": response_format,
+                },
+            )
 
         if response.status_code >= 400:
             return {
@@ -107,7 +107,7 @@ def generate_pollinations_image(
             "image": image_base64,
         }
 
-    except requests.Timeout:
+    except httpx.TimeoutException:
         return {
             "status": "error",
             "message": "Pollinations image generation timeout",
@@ -120,7 +120,7 @@ def generate_pollinations_image(
         }
 
 
-def generate_pollinations_audio(
+async def generate_pollinations_audio(
     text: str,
     voice: str = "nova",
     response_format: str = "mp3",
@@ -133,21 +133,21 @@ def generate_pollinations_audio(
     settings = get_settings()
 
     try:
-        response = requests.post(
-            f"{POLLINATIONS_BASE_URL}/v1/audio/speech",
-            headers={
-                "Authorization": f"Bearer {settings.POLLINATIONS_API_KEY}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": "elevenlabs",
-                "input": text,
-                "voice": voice,
-                "response_format": response_format,
-                "speed": speed,
-            },
-            timeout=120,
-        )
+        async with httpx.AsyncClient(timeout=120) as client:
+            response = await client.post(
+                f"{POLLINATIONS_BASE_URL}/v1/audio/speech",
+                headers={
+                    "Authorization": f"Bearer {settings.POLLINATIONS_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "elevenlabs",
+                    "input": text,
+                    "voice": voice,
+                    "response_format": response_format,
+                    "speed": speed,
+                },
+            )
 
         if response.status_code >= 400:
             return {
@@ -176,7 +176,7 @@ def generate_pollinations_audio(
             "audio_base64": audio_base64,
         }
 
-    except requests.Timeout:
+    except httpx.TimeoutException:
         return {
             "status": "error",
             "message": "Pollinations audio generation timeout",

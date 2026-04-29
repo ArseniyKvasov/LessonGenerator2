@@ -65,8 +65,8 @@ def health() -> dict[str, str]:
     response_model=Union[GenerateMetaSuccessResponse, ErrorResponse],
     dependencies=[Depends(verify_api_key)],
 )
-def generate_meta_endpoint(request_data: GenerateMetaRequest):
-    return generate_meta(request_data)
+async def generate_meta_endpoint(request_data: GenerateMetaRequest):
+    return await generate_meta(request_data)
 
 
 @app.post(
@@ -74,8 +74,8 @@ def generate_meta_endpoint(request_data: GenerateMetaRequest):
     response_model=Union[GenerateSectionsSuccessResponse, ErrorResponse],
     dependencies=[Depends(verify_api_key)],
 )
-def generate_sections_new_endpoint(request_data: GenerateSectionsRequest):
-    return generate_new_sections(request_data)
+async def generate_sections_new_endpoint(request_data: GenerateSectionsRequest):
+    return await generate_new_sections(request_data)
 
 
 @app.post(
@@ -83,8 +83,8 @@ def generate_sections_new_endpoint(request_data: GenerateSectionsRequest):
     response_model=Union[ImproveSectionSuccessResponse, ErrorResponse],
     dependencies=[Depends(verify_api_key)],
 )
-def improve_section_endpoint(request_data: ImproveSectionRequest):
-    return improve_section(request_data)
+async def improve_section_endpoint(request_data: ImproveSectionRequest):
+    return await improve_section(request_data)
 
 
 @app.post(
@@ -92,8 +92,8 @@ def improve_section_endpoint(request_data: ImproveSectionRequest):
     response_model=Union[GenerateReferencesSuccessResponse, ErrorResponse],
     dependencies=[Depends(verify_api_key)],
 )
-def generate_references_endpoint(request_data: GenerateReferencesRequest):
-    return generate_references(request_data)
+async def generate_references_endpoint(request_data: GenerateReferencesRequest):
+    return await generate_references(request_data)
 
 
 @app.post(
@@ -101,8 +101,8 @@ def generate_references_endpoint(request_data: GenerateReferencesRequest):
     response_model=Union[GenerateTasksPlanSuccessResponse, ErrorResponse],
     dependencies=[Depends(verify_api_key)],
 )
-def generate_tasks_plan_endpoint(request_data: GenerateTasksPlanRequest):
-    return generate_tasks_plan(request_data)
+async def generate_tasks_plan_endpoint(request_data: GenerateTasksPlanRequest):
+    return await generate_tasks_plan(request_data)
 
 
 @app.post(
@@ -110,9 +110,8 @@ def generate_tasks_plan_endpoint(request_data: GenerateTasksPlanRequest):
     response_model=Union[GenerateTasksSuccessResponse, ErrorResponse],
     dependencies=[Depends(verify_api_key)],
 )
-
-def generate_tasks_endpoint(request_data: GenerateTasksRequest):
-    return generate_tasks(request_data)
+async def generate_tasks_endpoint(request_data: GenerateTasksRequest):
+    return await generate_tasks(request_data)
 
 
 @app.post(
@@ -120,8 +119,8 @@ def generate_tasks_endpoint(request_data: GenerateTasksRequest):
     response_model=Union[GenerateImageSuccessResponse, ErrorResponse],
     dependencies=[Depends(verify_api_key)],
 )
-def generate_image_endpoint(request_data: GenerateImageRequest):
-    return generate_image_file(request_data)
+async def generate_image_endpoint(request_data: GenerateImageRequest):
+    return await generate_image_file(request_data)
 
 
 @app.post(
@@ -129,5 +128,5 @@ def generate_image_endpoint(request_data: GenerateImageRequest):
     response_model=Union[GenerateAudioSuccessResponse, ErrorResponse],
     dependencies=[Depends(verify_api_key)],
 )
-def generate_audio_endpoint(request_data: GenerateAudioRequest):
-    return generate_audio_file(request_data)
+async def generate_audio_endpoint(request_data: GenerateAudioRequest):
+    return await generate_audio_file(request_data)

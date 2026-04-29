@@ -109,7 +109,7 @@ def validate_references_result(
     return True, None, result
 
 
-def generate_references(request_data: GenerateReferencesRequest) -> dict[str, Any]:
+async def generate_references(request_data: GenerateReferencesRequest) -> dict[str, Any]:
     settings = get_settings()
 
     request_data.user_request = trim_to_words_limit(
@@ -125,7 +125,7 @@ def generate_references(request_data: GenerateReferencesRequest) -> dict[str, An
             previous_error=previous_error,
         )
 
-        result = generate(prompt=prompt, model_type="pro")
+        result = await generate(prompt=prompt, model_type="pro")
 
         if result["status"] == "error":
             previous_error = result["message"]

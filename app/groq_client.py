@@ -1,7 +1,7 @@
 import json
 from typing import Any, Literal
 
-from groq import Groq
+from groq import AsyncGroq
 
 from app.config import LIGHT_MODELS, PRO_MODELS, get_settings
 
@@ -24,7 +24,7 @@ def get_model_by_type(model_type: ModelType) -> str:
     return settings.PRO_MODEL
 
 
-def generate(prompt: str, model_type: ModelType = "light") -> dict[str, Any]:
+async def generate(prompt: str, model_type: ModelType = "light") -> dict[str, Any]:
     """
     Sends prompt to Groq and returns a unified JSON response.
 
@@ -44,10 +44,10 @@ def generate(prompt: str, model_type: ModelType = "light") -> dict[str, Any]:
     settings = get_settings()
     model = get_model_by_type(model_type)
 
-    client = Groq(api_key=settings.GROQ_API_KEY)
+    client = AsyncGroq(api_key=settings.GROQ_API_KEY)
 
     try:
-        response = client.chat.completions.create(
+        response = await client.chat.completions.create(
             model=model,
             temperature=0,
             messages=[

@@ -23,8 +23,8 @@ def build_audio_text(request_data: GenerateAudioRequest) -> str:
     return "\n".join(replicas)
 
 
-def generate_image_file(request_data: GenerateImageRequest) -> dict[str, Any]:
-    return generate_pollinations_image(
+async def generate_image_file(request_data: GenerateImageRequest) -> dict[str, Any]:
+    return await generate_pollinations_image(
         prompt=request_data.detailed_description,
         size=request_data.size,
         quality=request_data.quality,
@@ -32,7 +32,7 @@ def generate_image_file(request_data: GenerateImageRequest) -> dict[str, Any]:
     )
 
 
-def generate_audio_file(request_data: GenerateAudioRequest) -> dict[str, Any]:
+async def generate_audio_file(request_data: GenerateAudioRequest) -> dict[str, Any]:
     audio_text = build_audio_text(request_data)
 
     if len(audio_text) > 4096:
@@ -41,7 +41,7 @@ def generate_audio_file(request_data: GenerateAudioRequest) -> dict[str, Any]:
             "message": "Audio script is too long. Maximum is 4096 characters.",
         }
 
-    return generate_pollinations_audio(
+    return await generate_pollinations_audio(
         text=audio_text,
         voice=request_data.voice,
         response_format=request_data.response_format,

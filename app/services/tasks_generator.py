@@ -282,7 +282,7 @@ def validate_tasks_result(
     return True, None, generated_sections
 
 
-def generate_tasks(request_data: GenerateTasksRequest) -> dict[str, Any]:
+async def generate_tasks(request_data: GenerateTasksRequest) -> dict[str, Any]:
     settings = get_settings()
     previous_error = None
 
@@ -292,7 +292,7 @@ def generate_tasks(request_data: GenerateTasksRequest) -> dict[str, Any]:
             previous_error=previous_error,
         )
 
-        result = generate(prompt=prompt, model_type="pro")
+        result = await generate(prompt=prompt, model_type="pro")
 
         if result["status"] == "error":
             previous_error = result["message"]

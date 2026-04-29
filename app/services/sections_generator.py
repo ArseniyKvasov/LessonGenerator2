@@ -121,7 +121,7 @@ def validate_improved_section_result(data: dict[str, Any]) -> tuple[bool, Option
     }
 
 
-def generate_new_sections(request_data: GenerateSectionsRequest) -> dict[str, Any]:
+async def generate_new_sections(request_data: GenerateSectionsRequest) -> dict[str, Any]:
     settings = get_settings()
     user_request = trim_to_words_limit(request_data.user_request, max_words=1000)
 
@@ -133,7 +133,7 @@ def generate_new_sections(request_data: GenerateSectionsRequest) -> dict[str, An
             previous_error=previous_error,
         )
 
-        result = generate(prompt=prompt, model_type="light")
+        result = await generate(prompt=prompt, model_type="light")
 
         if result["status"] == "error":
             previous_error = result["message"]
@@ -155,7 +155,7 @@ def generate_new_sections(request_data: GenerateSectionsRequest) -> dict[str, An
     }
 
 
-def improve_section(request_data: ImproveSectionRequest) -> dict[str, Any]:
+async def improve_section(request_data: ImproveSectionRequest) -> dict[str, Any]:
     settings = get_settings()
 
     user_request = trim_to_words_limit(request_data.user_request, max_words=1000)
@@ -174,7 +174,7 @@ def improve_section(request_data: ImproveSectionRequest) -> dict[str, Any]:
             previous_error=previous_error,
         )
 
-        result = generate(prompt=prompt, model_type="light")
+        result = await generate(prompt=prompt, model_type="light")
 
         if result["status"] == "error":
             previous_error = result["message"]
