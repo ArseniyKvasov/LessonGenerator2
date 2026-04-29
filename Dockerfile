@@ -22,9 +22,9 @@ RUN useradd --create-home --shell /bin/bash appuser \
 
 USER appuser
 
-EXPOSE 8000
+EXPOSE 28743
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-    CMD curl -fsS http://127.0.0.1:8000/health/ || exit 1
+    CMD curl -fsS http://127.0.0.1:28743/health/ || exit 1
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "28743", "--workers", "2"]

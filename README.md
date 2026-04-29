@@ -32,7 +32,7 @@ docker compose up --build -d
 4. Проверьте health endpoint:
 
 ```bash
-curl http://localhost:8000/health/
+curl http://localhost:28743/health/
 ```
 
 Ожидаемый ответ:
@@ -65,7 +65,7 @@ cp .env.example .env
 4. Старт приложения:
 
 ```bash
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2
+uvicorn app.main:app --host 0.0.0.0 --port 28743 --workers 2
 ```
 
 ## Аутентификация
