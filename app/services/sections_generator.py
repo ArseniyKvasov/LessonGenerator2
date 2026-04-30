@@ -20,9 +20,8 @@ def build_new_sections_prompt(
         ),
         "rules": [
             "Return only valid JSON.",
-            "Generate 4-6 sections.",
+            "Generate several sections.",
             "Each section title must be 1-2 words.",
-            "Sections must be suitable for an interactive lesson.",
         ],
         "response_schema": {
             "sections": [
@@ -33,10 +32,6 @@ def build_new_sections_prompt(
         },
     }
 
-    if previous_error:
-        payload["previous_error"] = previous_error
-        payload["fix_instruction"] = "Regenerate the response and fix this error."
-
     return json.dumps(payload, ensure_ascii=False, indent=2)
 
 
@@ -44,27 +39,17 @@ def build_improve_sections_prompt(
     user_request: str,
     sections: list[dict[str, str]],
     improvement_request: str,
-    previous_error: Optional[str] = None,
 ) -> str:
-    final_improvement_request = improvement_request
-
-    if previous_error:
-        final_improvement_request = (
-            f"{improvement_request}\n\n"
-            f"Also fix this issue from previous attempt: {previous_error}"
-        )
-
     payload = {
         "user_request": user_request,
         "sections": sections,
-        "improvement_request": final_improvement_request,
+        "improvement_request": improvement_request,
         "task": (
             "Improve section titles according to the user's request. "
             "Return improved interactive lesson sections."
         ),
         "rules": [
             "Return only valid JSON.",
-            "Generate 4-6 sections.",
             "Each section title must be 1-2 words.",
             "Each section title must be <= 40 characters.",
             "Sections must be suitable for an interactive lesson.",
@@ -93,9 +78,6 @@ def validate_sections_result(data: dict[str, Any]) -> tuple[bool, Optional[str],
     if not data["sections"]:
         return False, "sections cannot be empty", None
 
-    if len(data["sections"]) < 4 or len(data["sections"]) > 6:
-        return False, "sections must contain 4-6 items", None
-
     sections = []
 
     for item in data["sections"]:
@@ -109,9 +91,6 @@ def validate_sections_result(data: dict[str, Any]) -> tuple[bool, Optional[str],
 
         title = trim_topic_to_chars(title, max_chars=40)
         words = [part for part in title.split() if part]
-
-        if len(words) < 1 or len(words) > 2:
-            return False, "Each section title must contain 1-2 words", None
 
         sections.append({
             "title": title,
@@ -132,7 +111,7 @@ async def generate_new_sections(request_data: GenerateSectionsRequest) -> dict[s
             previous_error=previous_error,
         )
 
-        result = await generate(prompt=prompt, model_type="light")
+        result = await generate(prompt=prompt, model_type="pro")
 
         if result["status"] == "error":
             previous_error = result["message"]
@@ -164,20 +143,16 @@ async def improve_sections(request_data: ImproveSectionRequest) -> dict[str, Any
     )
     source_sections = [section.model_dump() for section in request_data.sections]
 
-    previous_error = None
-
     for _ in range(settings.MAX_GENERATION_ATTEMPTS):
         prompt = build_improve_sections_prompt(
             user_request=user_request,
             sections=source_sections,
             improvement_request=improvement_request,
-            previous_error=previous_error,
         )
 
         result = await generate(prompt=prompt, model_type="light")
 
         if result["status"] == "error":
-            previous_error = result["message"]
             continue
 
         is_valid, error_message, sections = validate_sections_result(result["data"])
@@ -188,9 +163,7 @@ async def improve_sections(request_data: ImproveSectionRequest) -> dict[str, Any
                 "sections": sections,
             }
 
-        previous_error = error_message
-
     return {
         "status": "error",
-        "message": previous_error or "Could not improve sections",
+        "message": "Could not improve sections",
     }

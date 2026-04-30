@@ -33,24 +33,22 @@ def build_tasks_prompt(
         "rules": [
             "Return only valid JSON.",
             "Do not add markdown outside JSON.",
-            "Generate task content only for task types from the provided tasks plan.",
             "Keep the same task order.",
-            "Each generated task must match the requested task type.",
-            "Each generated task must match the requested task purpose.",
             "Use lesson_topic and section_title to generate relevant and focused content.",
             "Do not include lesson_topic in the response.",
-            "Use Russian for explanatory text unless lesson_topic/section_title explicitly require another language.",
+            "Use Russian for explanatory text. Do not translate examples into Russian if they have another language.",
             "note.content supports Markdown + LaTeX + \\n for line breaks.",
-            "reading_text.content supports Markdown + \\n for line breaks.",
+            "note should be short and include examples mostrly.",
+            "reading_text.content should include Markdown + \\n for line breaks.",
             "word_list.pairs must be word/phrase -> Russian translation.",
             "word_list.pairs must contain 5-15 items.",
             "For vocabulary sections, word_list must stay consistent with lesson_topic and section_title.",
             "test.questions must have 4-7 questions.",
-            "test question supports Markdown + LaTeX.",
+            "test question supports LaTeX.",
             "Each test question must have 2-4 options.",
             "Each test question must have exactly one correct option.",
             "true_or_false.statements must have 3-8 statements.",
-            "true_or_false.statement supports Markdown + LaTeX.",
+            "true_or_false.statement supports LaTeX.",
             "fill_gaps.text supports Markdown + LaTeX + \\n for line breaks.",
             "fill_gaps.text must use ___ for every gap.",
             "fill_gaps.text must contain 4-10 gaps marked as ___.",
@@ -96,7 +94,7 @@ def build_tasks_prompt(
                 "type": "test",
                 "questions": [
                     {
-                        "question": "Markdown + LaTeX question",
+                        "question": "LaTeX question",
                         "options": [
                             {
                                 "option": "string",
@@ -110,7 +108,7 @@ def build_tasks_prompt(
                 "type": "true_or_false",
                 "statements": [
                     {
-                        "statement": "Markdown + LaTeX statement",
+                        "statement": "LaTeX statement",
                         "is_true": True,
                     }
                 ],
