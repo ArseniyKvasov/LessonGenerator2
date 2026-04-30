@@ -1,12 +1,12 @@
-from typing import Any, Literal, Annotated, Union
+from typing import Any, Literal, Annotated, Union, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class GenerateMetaRequest(BaseModel):
     user_request: str = Field(min_length=1)
-    subject: str | None = None
-    subjects_available: list[str] | None = None
+    subject: Optional[str] = None
+    subjects_available: Optional[list[str]] = None
     colors_available: list[str]
     icons_available: list[str]
 
@@ -22,7 +22,7 @@ class GenerateMetaRequest(BaseModel):
 
     @field_validator("subject")
     @classmethod
-    def validate_subject(cls, value: str | None) -> str | None:
+    def validate_subject(cls, value: Optional[str]) -> Optional[str]:
         if value is None:
             return value
 
@@ -39,7 +39,10 @@ class GenerateMetaRequest(BaseModel):
         "icons_available",
     )
     @classmethod
-    def validate_available_values(cls, values: list[str] | None) -> list[str] | None:
+    def validate_available_values(
+        cls,
+        values: Optional[list[str]],
+    ) -> Optional[list[str]]:
         if values is None:
             return values
 
