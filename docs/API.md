@@ -48,7 +48,7 @@ X-API-Key: <your_api_key>
 ```json
 {
     "section_goal": "string",
-    "key_points": ["string"],
+    "points": ["string"],
     "practice_focus": "string"
 }
 ```
@@ -83,28 +83,12 @@ X-API-Key: <your_api_key>
 
 Generates lesson meta.
 
-`subject` input modes:
-- provide `subject` when it is already known (no subject selection);
-- or provide `subjects_available` to let the model choose one value from the list.
-- do not send both fields in one request.
-
 #### Request
 
 ```json
 {
     "user_request": "Present Continuous lesson for 5th grade",
     "subjects_available": ["English", "Math"],
-    "colors_available": ["blue", "green"],
-    "icons_available": ["book", "pencil"]
-}
-```
-
-#### Alternative Request (fixed subject)
-
-```json
-{
-    "user_request": "Present Continuous lesson for 5th grade",
-    "subject": "English",
     "colors_available": ["blue", "green"],
     "icons_available": ["book", "pencil"]
 }
@@ -193,7 +177,7 @@ Improves section titles.
 ### POST `/generate/references/`
 
 Generates structured reference for each section.
-Processing mode: section-by-section (sequentially), then aggregated into `sections`.
+Processing mode: one request for all sections (batch), returns aggregated `sections`.
 
 #### Request
 
@@ -217,7 +201,7 @@ Processing mode: section-by-section (sequentially), then aggregated into `sectio
             "title": "Form Basics",
             "reference": {
                 "section_goal": "Teach how to form sentences",
-                "key_points": [
+                "points": [
                     "am/is/are + verb-ing"
                 ],
                 "practice_focus": "Build sentences"
@@ -234,7 +218,7 @@ Processing mode: section-by-section (sequentially), then aggregated into `sectio
 ### POST `/generate/tasks-plan/`
 
 Generates task plan (types + purpose).
-Processing mode: section-by-section (sequentially), then aggregated into `sections`.
+Processing mode: one request for all sections (batch), returns aggregated `sections`.
 
 #### Request
 
@@ -246,7 +230,7 @@ Processing mode: section-by-section (sequentially), then aggregated into `sectio
             "title": "Form Basics",
             "reference": {
                 "section_goal": "Teach how to form sentences",
-                "key_points": ["am/is/are + verb-ing"],
+                "points": ["am/is/are + verb-ing"],
                 "practice_focus": "Build sentences"
             }
         }
@@ -264,7 +248,7 @@ Processing mode: section-by-section (sequentially), then aggregated into `sectio
             "title": "Form Basics",
             "reference": {
                 "section_goal": "Teach how to form sentences",
-                "key_points": ["am/is/are + verb-ing"],
+                "points": ["am/is/are + verb-ing"],
                 "practice_focus": "Build sentences"
             },
             "tasks": [
@@ -296,6 +280,11 @@ Generates full tasks for one section.
 {
     "lesson_topic": "Present Continuous",
     "section_title": "Form Basics",
+    "reference_points": [
+        "am/is/are + verb-ing",
+        "I am reading now",
+        "She is watching TV now"
+    ],
     "tasks": [
         { "type": "note", "purpose": "Explain grammar" },
         { "type": "fill_gaps", "purpose": "Practice" }

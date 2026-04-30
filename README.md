@@ -92,27 +92,29 @@ X-API-Key: <your_api_key>
 
 ## Модели Groq
 
-Поддерживаемые значения `LIGHT_MODEL`:
+Сервис выбирает случайную модель на каждый запрос из списков в [app/config.py](/Users/arseniy/PycharmProjects/LessonGenerator2/app/config.py).
+
+Light-модели:
 - `llama-3.1-8b-instant`
 - `gemma2-9b-it`
-- `llama-3.1-70b-versatile`
+- `allam-2-7b`
 - `openai/gpt-oss-20b`
+- `meta-llama/llama-4-scout-17b-16e-instruct`
 
-Поддерживаемые значения `PRO_MODEL`:
+Pro-модели:
 - `llama-3.3-70b-versatile`
-- `llama-3.1-405b-reasoning`
+- `qwen/qwen3-32b`
 - `openai/gpt-oss-120b`
 
 ### Важное по `/generate/meta/`
 
-- Передавайте либо `subject`, либо `subjects_available`.
-- Если передан `subject`, сервис использует его как фиксированное значение и не выбирает предмет из списка.
-- Если передан `subjects_available`, сервис выбирает `subject` из этого списка.
+- Передавайте `subjects_available`.
+- Сервис выбирает `subject` строго из `subjects_available`.
 
 ### Важное по pipeline генерации
 
-- `/generate/references/` и `/generate/tasks-plan/` обрабатывают урок пораздельно (section-by-section) и возвращают агрегированный результат.
-- `/generate/tasks/` принимает один раздел (`lesson_topic`, `section_title`, `tasks`) и генерирует задания только для него.
+- `/generate/references/` и `/generate/tasks-plan/` обрабатывают все разделы одним batch-запросом и возвращают агрегированный результат.
+- `/generate/tasks/` принимает один раздел (`lesson_topic`, `section_title`, `reference_points`, `tasks`) и генерирует задания только для него.
 
 ### Язык по умолчанию
 

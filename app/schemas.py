@@ -1,12 +1,11 @@
 from typing import Any, Literal, Annotated, Union, Optional
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class GenerateMetaRequest(BaseModel):
     user_request: str = Field(min_length=1)
-    subject: Optional[str] = None
-    subjects_available: Optional[list[str]] = None
+    subjects_available: list[str]
     colors_available: list[str]
     icons_available: list[str]
 
@@ -20,19 +19,6 @@ class GenerateMetaRequest(BaseModel):
 
         return cleaned
 
-    @field_validator("subject")
-    @classmethod
-    def validate_subject(cls, value: Optional[str]) -> Optional[str]:
-        if value is None:
-            return value
-
-        cleaned = value.strip()
-
-        if not cleaned:
-            raise ValueError("subject cannot be empty")
-
-        return cleaned
-
     @field_validator(
         "subjects_available",
         "colors_available",
@@ -41,11 +27,8 @@ class GenerateMetaRequest(BaseModel):
     @classmethod
     def validate_available_values(
         cls,
-        values: Optional[list[str]],
-    ) -> Optional[list[str]]:
-        if values is None:
-            return values
-
+        values: list[str],
+    ) -> list[str]:
         if not values:
             raise ValueError("List cannot be empty")
 
@@ -59,16 +42,6 @@ class GenerateMetaRequest(BaseModel):
             raise ValueError("List cannot contain only empty values")
 
         return cleaned_values
-
-    @model_validator(mode="after")
-    def validate_subject_input_mode(self) -> "GenerateMetaRequest":
-        if self.subject and self.subjects_available:
-            raise ValueError("Provide either subject or subjects_available, not both")
-
-        if not self.subject and not self.subjects_available:
-            raise ValueError("Either subject or subjects_available must be provided")
-
-        return self
 
 
 class GenerateMetaSuccessResponse(BaseModel):
@@ -150,7 +123,7 @@ class ImproveSectionSuccessResponse(BaseModel):
 
 class SectionReference(BaseModel):
     section_goal: str
-    key_points: list[str]
+    points: list[str]
     practice_focus: str
 
 
@@ -408,6 +381,7 @@ class SectionWithGeneratedTasks(BaseModel):
 class GenerateTasksRequest(BaseModel):
     lesson_topic: str = Field(min_length=1)
     section_title: str = Field(min_length=1, max_length=40)
+    reference_points: list[str] = Field(min_length=1)
     tasks: list[TaskPlanItem] = Field(min_length=1)
 
     @field_validator("lesson_topic", "section_title")
@@ -419,6 +393,20 @@ class GenerateTasksRequest(BaseModel):
             raise ValueError("Field cannot be empty")
 
         return cleaned
+
+    @field_validator("reference_points")
+    @classmethod
+    def validate_reference_points(cls, values: list[str]) -> list[str]:
+        cleaned_values = [
+            value.strip()
+            for value in values
+            if isinstance(value, str) and value.strip()
+        ]
+
+        if not cleaned_values:
+            raise ValueError("reference_points cannot be empty")
+
+        return cleaned_values
 
 
 class GenerateTasksSuccessResponse(BaseModel):
