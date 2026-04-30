@@ -1,4 +1,5 @@
 import json
+import random
 from typing import Any, Literal
 
 from groq import AsyncGroq
@@ -9,19 +10,33 @@ from app.config import LIGHT_MODELS, PRO_MODELS, get_settings
 ModelType = Literal["light", "pro"]
 
 
+_LAST_MODEL_BY_TYPE: dict[ModelType, str] = {}
+
+
 def get_model_by_type(model_type: ModelType) -> str:
     settings = get_settings()
+    models_pool = LIGHT_MODELS if model_type == "light" else PRO_MODELS
 
-    if model_type == "light":
-        if settings.LIGHT_MODEL not in LIGHT_MODELS:
-            return LIGHT_MODELS[0]
+    preferred_model = settings.LIGHT_MODEL if model_type == "light" else settings.PRO_MODEL
 
-        return settings.LIGHT_MODEL
+    if preferred_model in models_pool:
+        # Keep preferred model in pool, but do not force it on each retry.
+        available_models = models_pool
+    else:
+        available_models = models_pool
 
-    if settings.PRO_MODEL not in PRO_MODELS:
-        return PRO_MODELS[0]
+    if len(available_models) == 1:
+        selected_model = available_models[0]
+    else:
+        last_model = _LAST_MODEL_BY_TYPE.get(model_type)
+        candidates = [model for model in available_models if model != last_model]
+        if not candidates:
+            candidates = available_models
+        selected_model = random.choice(candidates)
 
-    return settings.PRO_MODEL
+    _LAST_MODEL_BY_TYPE[model_type] = selected_model
+
+    return selected_model
 
 
 async def generate(prompt: str, model_type: ModelType = "light") -> dict[str, Any]:
