@@ -149,7 +149,6 @@ class ImproveSectionSuccessResponse(BaseModel):
 
 
 class SectionReference(BaseModel):
-    lesson_topic: str
     section_goal: str
     key_points: list[str]
     practice_focus: str
@@ -247,10 +246,22 @@ class SectionTaskPlan(BaseModel):
 
 
 class GenerateTasksPlanRequest(BaseModel):
+    lesson_topic: str = Field(min_length=1)
     sections: list[SectionWithReference] = Field(min_length=1)
+
+    @field_validator("lesson_topic")
+    @classmethod
+    def validate_lesson_topic(cls, value: str) -> str:
+        cleaned = value.strip()
+
+        if not cleaned:
+            raise ValueError("lesson_topic cannot be empty")
+
+        return cleaned
 
 
 class GenerateSectionTasksPlanRequest(BaseModel):
+    lesson_topic: str = Field(min_length=1)
     section: SectionWithReference
 
 

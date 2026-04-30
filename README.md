@@ -90,6 +90,20 @@ X-API-Key: <your_api_key>
 
 Подробные примеры запросов/ответов: [docs/API.md](docs/API.md)
 
+## Модели Groq
+
+Поддерживаемые значения `LIGHT_MODEL`:
+- `llama-3.1-8b-instant`
+- `gemma2-9b-it`
+- `llama-3.1-70b-versatile`
+- `openai/gpt-oss-20b`
+
+Поддерживаемые значения `PRO_MODEL`:
+- `llama-3.3-70b-versatile`
+- `llama-3.1-405b-reasoning`
+- `deepseek-r1-distill-llama-70b`
+- `openai/gpt-oss-120b`
+
 ### Важное по `/generate/meta/`
 
 - Передавайте либо `subject`, либо `subjects_available`.
@@ -100,6 +114,10 @@ X-API-Key: <your_api_key>
 
 - `/generate/references/` и `/generate/tasks-plan/` обрабатывают урок пораздельно (section-by-section) и возвращают агрегированный результат.
 - `/generate/tasks/` принимает один раздел (`lesson_topic`, `section_title`, `tasks`) и генерирует задания только для него.
+
+### Язык по умолчанию
+
+- Объяснения и учебные формулировки генерируются на русском языке, если в запросе явно не указан другой язык.
 
 ## Production заметки
 

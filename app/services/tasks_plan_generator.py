@@ -26,6 +26,7 @@ def build_tasks_plan_prompt(
     previous_error: Optional[str] = None,
 ) -> str:
     payload = {
+        "lesson_topic": request_data.lesson_topic,
         "section": request_data.section.model_dump(),
         "task_types_available": TASK_TYPES_AVAILABLE,
         "task": (
@@ -38,6 +39,7 @@ def build_tasks_plan_prompt(
             "Use only task types from task_types_available.",
             "Section must have 2-4 tasks.",
             "Each task must have type and purpose.",
+            "Use Russian for explanatory text unless lesson_topic explicitly implies another language or user requested it earlier.",
             "Purpose must clearly explain what this task trains or checks.",
             "Prefer an educational flow: explain - practice.",
             "Do not add explanations outside JSON.",
@@ -189,7 +191,10 @@ async def generate_tasks_plan(request_data: GenerateTasksPlanRequest) -> dict[st
     sections: list[dict[str, Any]] = []
 
     for section in request_data.sections:
-        section_request = GenerateSectionTasksPlanRequest(section=section)
+        section_request = GenerateSectionTasksPlanRequest(
+            lesson_topic=request_data.lesson_topic,
+            section=section,
+        )
         result = await generate_section_tasks_plan(section_request)
 
         if result["status"] == "error":

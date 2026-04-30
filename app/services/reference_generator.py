@@ -28,6 +28,7 @@ def build_reference_prompt(
             "Do not add explanations outside JSON.",
             "Generate exactly one reference for the provided section.",
             "Keep the same section title as in the input.",
+            "Use Russian for explanatory text unless user_request explicitly asks for another language.",
             "section_goal must clearly describe what the student will learn or practice.",
             "key_points must contain all important material needed to generate exercises.",
             "Do not limit key_points to 3-5 items - write detailed materials.",
@@ -105,7 +106,6 @@ def validate_reference_result(
     return True, None, {
         "title": trim_topic_to_chars(request_data.section.title, 40),
         "reference": {
-            "lesson_topic": request_data.topic,
             "section_goal": section_goal.strip(),
             "key_points": cleaned_key_points,
             "practice_focus": practice_focus.strip(),

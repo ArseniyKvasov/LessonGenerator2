@@ -40,6 +40,29 @@ X-API-Key: <your_api_key>
 
 ---
 
+## Contract Update (2026-04-30)
+
+1. `/generate/references/`:
+- `reference` no longer contains `lesson_topic`.
+- Current `reference` schema:
+```json
+{
+    "section_goal": "string",
+    "key_points": ["string"],
+    "practice_focus": "string"
+}
+```
+
+2. `/generate/tasks-plan/`:
+- Request now requires top-level `lesson_topic`.
+- `sections[].reference` must use the same schema as `/generate/references/` (without `lesson_topic`).
+- Response format remains the same as current implementation (includes `title`, `reference`, `tasks` for each section).
+
+3. Language default:
+- Explanatory content is generated in Russian by default, unless another language is explicitly requested.
+
+---
+
 # 1. Health Check
 
 ### GET `/health/`
@@ -193,7 +216,6 @@ Processing mode: section-by-section (sequentially), then aggregated into `sectio
         {
             "title": "Form Basics",
             "reference": {
-                "lesson_topic": "Present Continuous",
                 "section_goal": "Teach how to form sentences",
                 "key_points": [
                     "am/is/are + verb-ing"
@@ -218,11 +240,11 @@ Processing mode: section-by-section (sequentially), then aggregated into `sectio
 
 ```json
 {
+    "lesson_topic": "Present Continuous",
     "sections": [
         {
             "title": "Form Basics",
             "reference": {
-                "lesson_topic": "Present Continuous",
                 "section_goal": "Teach how to form sentences",
                 "key_points": ["am/is/are + verb-ing"],
                 "practice_focus": "Build sentences"
@@ -240,6 +262,11 @@ Processing mode: section-by-section (sequentially), then aggregated into `sectio
     "sections": [
         {
             "title": "Form Basics",
+            "reference": {
+                "section_goal": "Teach how to form sentences",
+                "key_points": ["am/is/are + verb-ing"],
+                "practice_focus": "Build sentences"
+            },
             "tasks": [
                 {
                     "type": "note",

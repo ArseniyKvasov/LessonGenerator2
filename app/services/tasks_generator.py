@@ -39,6 +39,7 @@ def build_tasks_prompt(
             "Each generated task must match the requested task purpose.",
             "Use lesson_topic and section_title to generate relevant and focused content.",
             "Do not include lesson_topic in the response.",
+            "Use Russian for explanatory text unless lesson_topic/section_title explicitly require another language.",
             "note.content supports Markdown + LaTeX + \\n for line breaks.",
             "reading_text.content supports Markdown + \\n for line breaks.",
             "word_list.pairs must be word/phrase -> Russian translation.",
