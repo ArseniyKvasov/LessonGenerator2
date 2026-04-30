@@ -46,10 +46,18 @@ def build_improve_sections_prompt(
     improvement_request: str,
     previous_error: Optional[str] = None,
 ) -> str:
+    final_improvement_request = improvement_request
+
+    if previous_error:
+        final_improvement_request = (
+            f"{improvement_request}\n\n"
+            f"Also fix this issue from previous attempt: {previous_error}"
+        )
+
     payload = {
         "user_request": user_request,
         "sections": sections,
-        "improvement_request": improvement_request,
+        "improvement_request": final_improvement_request,
         "task": (
             "Improve section titles according to the user's request. "
             "Return improved interactive lesson sections."
@@ -71,10 +79,6 @@ def build_improve_sections_prompt(
             ]
         },
     }
-
-    if previous_error:
-        payload["previous_error"] = previous_error
-        payload["fix_instruction"] = "Regenerate the response and fix this error."
 
     return json.dumps(payload, ensure_ascii=False, indent=2)
 
@@ -179,10 +183,6 @@ async def improve_sections(request_data: ImproveSectionRequest) -> dict[str, Any
         is_valid, error_message, sections = validate_sections_result(result["data"])
 
         if is_valid and sections:
-            if len(sections) != len(source_sections):
-                previous_error = "sections count must match input sections count"
-                continue
-
             return {
                 "status": "ok",
                 "sections": sections,
