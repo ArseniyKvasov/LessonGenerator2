@@ -1,7 +1,10 @@
 import logging
+import time
+from pathlib import Path
 from typing import Annotated, Union, Optional
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
+from fastapi.responses import Response
 
 from app.config import get_settings
 from app.schemas import (
@@ -42,6 +45,26 @@ app = FastAPI(
 )
 
 logger = logging.getLogger(__name__)
+api_logger = logging.getLogger("api.requests")
+
+
+def _configure_api_file_logger() -> None:
+    logs_dir = Path("logs")
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    log_file = logs_dir / "api.log"
+
+    if api_logger.handlers:
+        return
+
+    handler = logging.FileHandler(log_file, encoding="utf-8")
+    formatter = logging.Formatter("%(asctime)s | %(message)s")
+    handler.setFormatter(formatter)
+    api_logger.addHandler(handler)
+    api_logger.setLevel(logging.INFO)
+    api_logger.propagate = False
+
+
+_configure_api_file_logger()
 
 
 def _mask_key(value: Optional[str]) -> str:
@@ -75,6 +98,48 @@ def verify_api_key(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid API key",
         )
+
+
+@app.middleware("http")
+async def log_api_calls(request: Request, call_next):
+    started_at = time.perf_counter()
+    request_body_bytes = await request.body()
+
+    try:
+        request_body = request_body_bytes.decode("utf-8")
+    except UnicodeDecodeError:
+        request_body = "<non-utf8-body>"
+
+    response = await call_next(request)
+
+    response_body_bytes = b""
+    async for chunk in response.body_iterator:
+        response_body_bytes += chunk
+
+    try:
+        response_body = response_body_bytes.decode("utf-8")
+    except UnicodeDecodeError:
+        response_body = "<non-utf8-body>"
+
+    elapsed_ms = round((time.perf_counter() - started_at) * 1000, 2)
+
+    api_logger.info(
+        "method=%s path=%s status=%s duration_ms=%s request=%s response=%s",
+        request.method,
+        request.url.path,
+        response.status_code,
+        elapsed_ms,
+        request_body,
+        response_body,
+    )
+
+    return Response(
+        content=response_body_bytes,
+        status_code=response.status_code,
+        headers=dict(response.headers),
+        media_type=response.media_type,
+        background=response.background,
+    )
 
 
 @app.get("/health/")
