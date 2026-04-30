@@ -3,7 +3,7 @@ from typing import Any, Optional
 
 from app.config import get_settings
 from app.groq_client import generate
-from app.schemas import GenerateTasksPlanRequest
+from app.schemas import GenerateSectionTasksPlanRequest, GenerateTasksPlanRequest
 
 
 TASK_TYPES_AVAILABLE = [
@@ -22,43 +22,37 @@ TASK_TYPES_AVAILABLE = [
 
 
 def build_tasks_plan_prompt(
-    request_data: GenerateTasksPlanRequest,
+    request_data: GenerateSectionTasksPlanRequest,
     previous_error: Optional[str] = None,
 ) -> str:
     payload = {
-        "sections": [section.model_dump() for section in request_data.sections],
+        "section": request_data.section.model_dump(),
         "task_types_available": TASK_TYPES_AVAILABLE,
         "task": (
-            "Create a task plan for each lesson section. "
+            "Create a task plan for this lesson section. "
             "Do not generate the task content yet. "
             "Only choose task types and explain the purpose of each task."
         ),
         "rules": [
             "Return only valid JSON.",
             "Use only task types from task_types_available.",
-            "Each section must have 2-4 tasks.",
+            "Section must have 2-4 tasks.",
             "Each task must have type and purpose.",
             "Purpose must clearly explain what this task trains or checks.",
-            "Do not use more than one note per section.",
-            "Do not use more than one reading_text per section.",
-            "Do not use more than one image per section.",
-            "Do not use more than one audio per section.",
-            "Avoid repeating the same task pattern in every section.",
-            "Prefer an educational flow: explain, practice, check, apply.",
+            "Prefer an educational flow: explain - practice.",
             "Do not add explanations outside JSON.",
+            "Do not repeat task types in one section."
         ],
         "response_schema": {
-            "sections": [
-                {
-                    "title": "string",
-                    "tasks": [
-                        {
-                            "type": "note",
-                            "purpose": "string",
-                        }
-                    ],
-                }
-            ]
+            "section": {
+                "title": "string",
+                "tasks": [
+                    {
+                        "type": "note",
+                        "purpose": "string",
+                    }
+                ],
+            }
         },
     }
 
@@ -71,99 +65,92 @@ def build_tasks_plan_prompt(
 
 def validate_tasks_plan_result(
     data: dict[str, Any],
-    request_data: GenerateTasksPlanRequest,
-) -> tuple[bool, Optional[str], Optional[list[dict[str, Any]]]]:
-    if "sections" not in data:
-        return False, "Missing field: sections", None
+    request_data: GenerateSectionTasksPlanRequest,
+) -> tuple[bool, Optional[str], Optional[dict[str, Any]]]:
+    if "section" not in data:
+        return False, "Missing field: section", None
 
-    if not isinstance(data["sections"], list):
-        return False, "sections must be a list", None
+    item = data["section"]
 
-    if len(data["sections"]) != len(request_data.sections):
-        return False, "sections count mismatch", None
+    if not isinstance(item, dict):
+        return False, "section must be an object", None
 
-    result = []
+    source_section = request_data.section
 
-    for index, item in enumerate(data["sections"]):
-        if not isinstance(item, dict):
-            return False, "Each section must be an object", None
+    title = item.get("title")
+    tasks = item.get("tasks")
 
-        source_section = request_data.sections[index]
+    if not isinstance(title, str) or not title.strip():
+        return False, "Section title cannot be empty", None
 
-        title = item.get("title")
-        tasks = item.get("tasks")
+    if title.strip() != source_section.title:
+        return False, "Section title mismatch", None
 
-        if not isinstance(title, str) or not title.strip():
-            return False, "Section title cannot be empty", None
+    if not isinstance(tasks, list):
+        return False, "tasks must be a list", None
 
-        if title.strip() != source_section.title:
-            return False, "Section title mismatch", None
+    if len(tasks) < 2 or len(tasks) > 4:
+        return False, "Section must have 2-4 tasks", None
 
-        if not isinstance(tasks, list):
-            return False, "tasks must be a list", None
+    note_count = 0
+    reading_count = 0
+    image_count = 0
+    audio_count = 0
 
-        if len(tasks) < 2 or len(tasks) > 4:
-            return False, "Each section must have 2-4 tasks", None
+    cleaned_tasks = []
 
-        note_count = 0
-        reading_count = 0
-        image_count = 0
-        audio_count = 0
+    for task in tasks:
+        if not isinstance(task, dict):
+            return False, "Each task must be an object", None
 
-        cleaned_tasks = []
+        task_type = task.get("type")
+        purpose = task.get("purpose")
 
-        for task in tasks:
-            if not isinstance(task, dict):
-                return False, "Each task must be an object", None
+        if task_type not in TASK_TYPES_AVAILABLE:
+            return False, f"Invalid task type: {task_type}", None
 
-            task_type = task.get("type")
-            purpose = task.get("purpose")
+        if not isinstance(purpose, str) or not purpose.strip():
+            return False, "Task purpose cannot be empty", None
 
-            if task_type not in TASK_TYPES_AVAILABLE:
-                return False, f"Invalid task type: {task_type}", None
+        if task_type == "note":
+            note_count += 1
 
-            if not isinstance(purpose, str) or not purpose.strip():
-                return False, "Task purpose cannot be empty", None
+        if task_type == "reading_text":
+            reading_count += 1
 
-            if task_type == "note":
-                note_count += 1
+        if task_type == "image":
+            image_count += 1
 
-            if task_type == "reading_text":
-                reading_count += 1
+        if task_type == "audio":
+            audio_count += 1
 
-            if task_type == "image":
-                image_count += 1
-
-            if task_type == "audio":
-                audio_count += 1
-
-            cleaned_tasks.append({
-                "type": task_type,
-                "purpose": purpose.strip(),
-            })
-
-        if note_count > 1:
-            return False, "Only one note is allowed per section", None
-
-        if reading_count > 1:
-            return False, "Only one reading_text is allowed per section", None
-
-        if image_count > 1:
-            return False, "Only one image is allowed per section", None
-
-        if audio_count > 1:
-            return False, "Only one audio is allowed per section", None
-
-        result.append({
-            "title": source_section.title,
-            "reference": source_section.reference.model_dump(),
-            "tasks": cleaned_tasks,
+        cleaned_tasks.append({
+            "type": task_type,
+            "purpose": purpose.strip(),
         })
 
-    return True, None, result
+    if note_count > 1:
+        return False, "Only one note is allowed per section", None
+
+    if reading_count > 1:
+        return False, "Only one reading_text is allowed per section", None
+
+    if image_count > 1:
+        return False, "Only one image is allowed per section", None
+
+    if audio_count > 1:
+        return False, "Only one audio is allowed per section", None
+
+    return True, None, {
+        "title": source_section.title,
+        "reference": source_section.reference.model_dump(),
+        "tasks": cleaned_tasks,
+    }
 
 
-async def generate_tasks_plan(request_data: GenerateTasksPlanRequest) -> dict[str, Any]:
+async def generate_section_tasks_plan(
+    request_data: GenerateSectionTasksPlanRequest,
+) -> dict[str, Any]:
     settings = get_settings()
     previous_error = None
 
@@ -179,20 +166,38 @@ async def generate_tasks_plan(request_data: GenerateTasksPlanRequest) -> dict[st
             previous_error = result["message"]
             continue
 
-        is_valid, error_message, sections = validate_tasks_plan_result(
+        is_valid, error_message, section = validate_tasks_plan_result(
             data=result["data"],
             request_data=request_data,
         )
 
-        if is_valid and sections:
+        if is_valid and section:
             return {
                 "status": "ok",
-                "sections": sections,
+                "section": section,
             }
 
         previous_error = error_message
 
     return {
         "status": "error",
-        "message": previous_error or "Could not generate valid tasks plan",
+        "message": previous_error or "Could not generate valid section tasks plan",
+    }
+
+
+async def generate_tasks_plan(request_data: GenerateTasksPlanRequest) -> dict[str, Any]:
+    sections: list[dict[str, Any]] = []
+
+    for section in request_data.sections:
+        section_request = GenerateSectionTasksPlanRequest(section=section)
+        result = await generate_section_tasks_plan(section_request)
+
+        if result["status"] == "error":
+            return result
+
+        sections.append(result["section"])
+
+    return {
+        "status": "ok",
+        "sections": sections,
     }

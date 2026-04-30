@@ -17,23 +17,33 @@ def build_tasks_prompt(
     previous_error: Optional[str] = None,
 ) -> str:
     payload = {
-        "sections": [section.model_dump() for section in request_data.sections],
+        "lesson_topic": request_data.lesson_topic,
+        "section_title": request_data.section_title,
+        "tasks": [task.model_dump() for task in request_data.tasks],
         "task": (
-            "Generate full lesson tasks for each section. "
-            "Use the provided task plan. "
+            "Generate full task content for this section. "
+            "Use lesson_topic, section_title and the provided task plan. "
             "Return tasks exactly in the requested JSON format."
         ),
+        "generation_focus": [
+            "Generate only tasks for the provided section.",
+            "Each task must follow its type and purpose.",
+            "Use lesson_topic and section_title as the main context source.",
+        ],
         "rules": [
             "Return only valid JSON.",
             "Do not add markdown outside JSON.",
-            "Generate task content only for task types from the provided task plan.",
-            "Keep the same section order.",
-            "Keep the same task order inside each section.",
-            "Use section reference to generate relevant content.",
+            "Generate task content only for task types from the provided tasks plan.",
+            "Keep the same task order.",
+            "Each generated task must match the requested task type.",
+            "Each generated task must match the requested task purpose.",
+            "Use lesson_topic and section_title to generate relevant and focused content.",
+            "Do not include lesson_topic in the response.",
             "note.content supports Markdown + LaTeX + \\n for line breaks.",
-            "By default, note explanations must be in Russian unless explicitly requested otherwise.",
             "reading_text.content supports Markdown + \\n for line breaks.",
             "word_list.pairs must be word/phrase -> Russian translation.",
+            "word_list.pairs must contain 5-15 items.",
+            "For vocabulary sections, word_list must stay consistent with lesson_topic and section_title.",
             "test.questions must have 4-7 questions.",
             "test question supports Markdown + LaTeX.",
             "Each test question must have 2-4 options.",
@@ -139,22 +149,21 @@ def build_tasks_prompt(
             },
         },
         "response_schema": {
-            "sections": [
+            "section_title": "string",
+            "tasks": [
                 {
-                    "title": "string",
-                    "tasks": [
-                        {
-                            "type": "task type from plan",
-                        }
-                    ],
+                    "type": "task type from plan",
                 }
-            ]
+            ],
         },
     }
 
     if previous_error:
         payload["previous_error"] = previous_error
-        payload["fix_instruction"] = "Regenerate the response and fix this error."
+        payload["fix_instruction"] = (
+            "Regenerate the response and fix this error. "
+            "Return only valid JSON that matches the schema."
+        )
 
     return json.dumps(payload, ensure_ascii=False, indent=2)
 
@@ -180,7 +189,7 @@ def validate_fill_gaps_task(task: dict[str, Any]) -> tuple[bool, Optional[str]]:
         return False, "fill_gaps.text must contain at least one gap marked as ___"
 
     if gaps_count < 4 or gaps_count > 10:
-        return False, "fill_gaps must contain 4-10 gaps", None
+        return False, "fill_gaps must contain 4-10 gaps"
 
     if gaps_count != len(task["answers"]):
         return False, "fill_gaps answers count must match gaps count"
@@ -210,7 +219,13 @@ def validate_audio_task(task: dict[str, Any]) -> tuple[bool, Optional[str]]:
     return True, None
 
 
-def validate_generated_task(task: dict[str, Any]) -> tuple[bool, Optional[str], Optional[dict[str, Any]]]:
+def validate_generated_task(
+    task: dict[str, Any],
+) -> tuple[bool, Optional[str], Optional[dict[str, Any]]]:
+    """
+    Validate one generated task through Pydantic schema and additional
+    business rules that are difficult to express in the base schema.
+    """
     try:
         parsed_task = GeneratedTaskAdapter.validate_python(task)
     except ValidationError as error:
@@ -242,61 +257,54 @@ def validate_generated_task(task: dict[str, Any]) -> tuple[bool, Optional[str], 
 def validate_tasks_result(
     data: dict[str, Any],
     request_data: GenerateTasksRequest,
-) -> tuple[bool, Optional[str], Optional[list[dict[str, Any]]]]:
-    if "sections" not in data:
-        return False, "Missing field: sections", None
+) -> tuple[bool, Optional[str], Optional[dict[str, Any]]]:
+    """
+    Validate generated tasks for a single section.
 
-    if not isinstance(data["sections"], list):
-        return False, "sections must be a list", None
+    The function checks that the model returned tasks only for the requested
+    section, preserved task order, and generated every task according to the
+    requested type from the task plan.
+    """
+    if "section_title" not in data:
+        return False, "Missing field: section_title", None
 
-    if len(data["sections"]) != len(request_data.sections):
-        return False, "sections count mismatch", None
+    if data["section_title"] != request_data.section_title:
+        return False, "Section title mismatch", None
 
-    generated_sections = []
+    if "tasks" not in data:
+        return False, "Missing field: tasks", None
 
-    for section_index, section_data in enumerate(data["sections"]):
-        if not isinstance(section_data, dict):
-            return False, "Each section must be an object", None
+    tasks = data["tasks"]
 
-        source_section = request_data.sections[section_index]
+    if not isinstance(tasks, list):
+        return False, "tasks must be a list", None
 
-        if section_data.get("title") != source_section.title:
-            return False, "Section title mismatch", None
+    if len(tasks) != len(request_data.tasks):
+        return False, "tasks count mismatch", None
 
-        tasks = section_data.get("tasks")
+    generated_tasks = []
 
-        if not isinstance(tasks, list):
-            return False, "tasks must be a list", None
+    for task_index, task in enumerate(tasks):
+        if not isinstance(task, dict):
+            return False, "Each task must be an object", None
 
-        if len(tasks) != len(source_section.tasks):
-            return False, "tasks count mismatch", None
+        expected_type = request_data.tasks[task_index].type
+        actual_type = task.get("type")
 
-        generated_tasks = []
+        if actual_type != expected_type:
+            return False, f"Task type mismatch: expected {expected_type}, got {actual_type}", None
 
-        for task_index, task in enumerate(tasks):
-            if not isinstance(task, dict):
-                return False, "Each task must be an object", None
+        is_valid, error_message, generated_task = validate_generated_task(task)
 
-            expected_type = source_section.tasks[task_index].type
-            actual_type = task.get("type")
+        if not is_valid or not generated_task:
+            return False, error_message, None
 
-            if actual_type != expected_type:
-                return False, f"Task type mismatch: expected {expected_type}, got {actual_type}", None
+        generated_tasks.append(generated_task)
 
-            is_valid, error_message, generated_task = validate_generated_task(task)
-
-            if not is_valid or not generated_task:
-                return False, error_message, None
-
-            generated_tasks.append(generated_task)
-
-        generated_sections.append({
-            "title": source_section.title,
-            "reference": source_section.reference.model_dump(),
-            "tasks": generated_tasks,
-        })
-
-    return True, None, generated_sections
+    return True, None, {
+        "title": request_data.section_title,
+        "tasks": generated_tasks,
+    }
 
 
 async def generate_tasks(request_data: GenerateTasksRequest) -> dict[str, Any]:
@@ -315,20 +323,20 @@ async def generate_tasks(request_data: GenerateTasksRequest) -> dict[str, Any]:
             previous_error = result["message"]
             continue
 
-        is_valid, error_message, sections = validate_tasks_result(
+        is_valid, error_message, section = validate_tasks_result(
             data=result["data"],
             request_data=request_data,
         )
 
-        if is_valid and sections:
+        if is_valid and section:
             return {
                 "status": "ok",
-                "sections": sections,
+                "section": section,
             }
 
         previous_error = error_message
 
     return {
         "status": "error",
-        "message": previous_error or "Could not generate valid tasks",
+        "message": previous_error or "Could not generate valid section tasks",
     }

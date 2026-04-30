@@ -68,6 +68,7 @@ async def generate(prompt: str, model_type: ModelType = "light") -> dict[str, An
             response_format={
                 "type": "json_object",
             },
+            max_tokens=4096,
         )
 
         content = response.choices[0].message.content

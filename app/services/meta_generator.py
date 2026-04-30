@@ -14,18 +14,17 @@ def build_meta_prompt(
 ) -> str:
     """
     Builds a strict prompt for generating lesson/task metadata.
-    The model must choose subject, color and icon only from provided lists.
+    The model must choose color and icon from provided lists.
+    Subject is either fixed (`subject`) or chosen from `subjects_available`.
     """
     payload = {
         "user_request": user_request,
-        "subjects_available": request_data.subjects_available,
         "colors_available": request_data.colors_available,
         "icons_available": request_data.icons_available,
         "rules": [
             "Return only valid JSON.",
             "topic must be a short title based on user_request.",
             "topic must be <= 40 characters.",
-            "subject must be exactly one value from subjects_available.",
             "color must be exactly one value from colors_available.",
             "icon must be exactly one value from icons_available.",
             "Do not invent values.",
@@ -37,6 +36,14 @@ def build_meta_prompt(
             "icon": "string",
         },
     }
+    if request_data.subject is not None:
+        payload["subject"] = request_data.subject
+        payload["rules"].append("subject must be exactly the provided subject value.")
+    else:
+        payload["subjects_available"] = request_data.subjects_available
+        payload["rules"].append(
+            "subject must be exactly one value from subjects_available."
+        )
 
     if previous_error:
         payload["previous_error"] = previous_error
@@ -66,7 +73,13 @@ def validate_meta_result(
     color = data["color"].strip()
     icon = data["icon"].strip()
 
-    if subject not in request_data.subjects_available:
+    if request_data.subject is not None:
+        if subject != request_data.subject:
+            return False, "Subject must match provided subject", None
+    elif (
+        request_data.subjects_available is None
+        or subject not in request_data.subjects_available
+    ):
         return False, "Subject is not in subjects_available", None
 
     if color not in request_data.colors_available:

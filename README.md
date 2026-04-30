@@ -90,6 +90,17 @@ X-API-Key: <your_api_key>
 
 Подробные примеры запросов/ответов: [docs/API.md](docs/API.md)
 
+### Важное по `/generate/meta/`
+
+- Передавайте либо `subject`, либо `subjects_available`.
+- Если передан `subject`, сервис использует его как фиксированное значение и не выбирает предмет из списка.
+- Если передан `subjects_available`, сервис выбирает `subject` из этого списка.
+
+### Важное по pipeline генерации
+
+- `/generate/references/` и `/generate/tasks-plan/` обрабатывают урок пораздельно (section-by-section) и возвращают агрегированный результат.
+- `/generate/tasks/` принимает один раздел (`lesson_topic`, `section_title`, `tasks`) и генерирует задания только для него.
+
 ## Production заметки
 
 - Базовый образ: `python:3.9-slim`

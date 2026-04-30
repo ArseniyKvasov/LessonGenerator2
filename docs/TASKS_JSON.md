@@ -53,7 +53,8 @@ Markdown content. `\n` is allowed for line breaks.
 
 # 3. word_list
 
-List of `word/phrase -> Russian translation` pairs.
+List of `word/phrase -> Russian translation` pairs.  
+Must contain 5-15 pairs.
 
 ```json
 {

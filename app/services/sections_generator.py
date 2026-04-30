@@ -23,7 +23,6 @@ def build_new_sections_prompt(
             "Generate 4-6 sections.",
             "Each section title must be 1-2 words.",
             "Sections must be suitable for an interactive lesson.",
-            "Do not add explanations.",
         ],
         "response_schema": {
             "sections": [

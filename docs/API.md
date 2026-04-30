@@ -60,12 +60,28 @@ X-API-Key: <your_api_key>
 
 Generates lesson meta.
 
+`subject` input modes:
+- provide `subject` when it is already known (no subject selection);
+- or provide `subjects_available` to let the model choose one value from the list.
+- do not send both fields in one request.
+
 #### Request
 
 ```json
 {
     "user_request": "Present Continuous lesson for 5th grade",
     "subjects_available": ["English", "Math"],
+    "colors_available": ["blue", "green"],
+    "icons_available": ["book", "pencil"]
+}
+```
+
+#### Alternative Request (fixed subject)
+
+```json
+{
+    "user_request": "Present Continuous lesson for 5th grade",
+    "subject": "English",
     "colors_available": ["blue", "green"],
     "icons_available": ["book", "pencil"]
 }
@@ -154,6 +170,7 @@ Improves section titles.
 ### POST `/generate/references/`
 
 Generates structured reference for each section.
+Processing mode: section-by-section (sequentially), then aggregated into `sections`.
 
 #### Request
 
@@ -195,6 +212,7 @@ Generates structured reference for each section.
 ### POST `/generate/tasks-plan/`
 
 Generates task plan (types + purpose).
+Processing mode: section-by-section (sequentially), then aggregated into `sections`.
 
 #### Request
 
@@ -243,21 +261,17 @@ Generates task plan (types + purpose).
 
 ### POST `/generate/tasks/`
 
-Generates full lesson tasks.
+Generates full tasks for one section.
 
 #### Request
 
 ```json
 {
-    "sections": [
-        {
-            "title": "Form Basics",
-            "reference": { ... },
-            "tasks": [
-                { "type": "note", "purpose": "Explain grammar" },
-                { "type": "fill_gaps", "purpose": "Practice" }
-            ]
-        }
+    "lesson_topic": "Present Continuous",
+    "section_title": "Form Basics",
+    "tasks": [
+        { "type": "note", "purpose": "Explain grammar" },
+        { "type": "fill_gaps", "purpose": "Practice" }
     ]
 }
 ```
@@ -267,23 +281,21 @@ Generates full lesson tasks.
 ```json
 {
     "status": "ok",
-    "sections": [
-        {
-            "title": "Form Basics",
-            "tasks": [
-                {
-                    "type": "note",
-                    "content": "Use am/is/are..."
-                },
-                {
-                    "type": "fill_gaps",
-                    "mode": "closed",
-                    "text": "She ___ TV now.",
-                    "answers": ["is watching"]
-                }
-            ]
-        }
-    ]
+    "section": {
+        "title": "Form Basics",
+        "tasks": [
+            {
+                "type": "note",
+                "content": "Use am/is/are..."
+            },
+            {
+                "type": "fill_gaps",
+                "mode": "closed",
+                "text": "She ___ TV now.",
+                "answers": ["is watching"]
+            }
+        ]
+    }
 }
 ```
 
