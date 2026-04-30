@@ -21,7 +21,9 @@ def build_new_sections_prompt(
         "rules": [
             "Return only valid JSON.",
             "Generate several sections.",
+            "Generate 4-6 sections.",
             "Each section title must be 1-2 words.",
+            "Consider that it is an individual lesson.",
         ],
         "response_schema": {
             "sections": [
@@ -55,6 +57,7 @@ def build_improve_sections_prompt(
             "Sections must be suitable for an interactive lesson.",
             "Keep section order.",
             "Do not add explanations.",
+            "Consider that it is an individual lesson."
         ],
         "response_schema": {
             "sections": [
@@ -68,7 +71,11 @@ def build_improve_sections_prompt(
     return json.dumps(payload, ensure_ascii=False, indent=2)
 
 
-def validate_sections_result(data: dict[str, Any]) -> tuple[bool, Optional[str], Optional[list[dict[str, str]]]]:
+def validate_sections_result(
+    data: dict[str, Any],
+    min_sections: Optional[int] = None,
+    max_sections: Optional[int] = None,
+) -> tuple[bool, Optional[str], Optional[list[dict[str, str]]]]:
     if "sections" not in data:
         return False, "Missing field: sections", None
 
@@ -77,6 +84,12 @@ def validate_sections_result(data: dict[str, Any]) -> tuple[bool, Optional[str],
 
     if not data["sections"]:
         return False, "sections cannot be empty", None
+
+    sections_count = len(data["sections"])
+    if min_sections is not None and sections_count < min_sections:
+        return False, f"sections count must be >= {min_sections}", None
+    if max_sections is not None and sections_count > max_sections:
+        return False, f"sections count must be <= {max_sections}", None
 
     sections = []
 
@@ -117,7 +130,11 @@ async def generate_new_sections(request_data: GenerateSectionsRequest) -> dict[s
             previous_error = result["message"]
             continue
 
-        is_valid, error_message, sections = validate_sections_result(result["data"])
+        is_valid, error_message, sections = validate_sections_result(
+            result["data"],
+            min_sections=4,
+            max_sections=6,
+        )
 
         if is_valid and sections:
             return {
