@@ -6,13 +6,14 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 LIGHT_MODELS = [
     "llama-3.1-8b-instant",
     "gemma2-9b-it",
-    "llama-3.1-70b-versatile",
+    "allam-2-7b",
     "openai/gpt-oss-20b",
+    "meta-llama/llama-4-scout-17b-16e-instruct"
 ]
 
 PRO_MODELS = [
     "llama-3.3-70b-versatile",
-    "llama-3.1-405b-reasoning",
+    "qwen/qwen3-32b",
     "openai/gpt-oss-120b",
 ]
 
