@@ -2,422 +2,197 @@
 
 Base URL:
 
-```
+```text
 http://localhost:28743
 ```
 
----
+All endpoints except `/health/` require:
 
-## Authentication
-
-All endpoints (except `/health/`) require header:
-
-```
+```text
 X-API-Key: <your_api_key>
 ```
 
----
+## Pipeline
 
-## Common Response Format
-
-### Success
-
-```json
-{
-    "status": "ok",
-    ...
-}
-```
-
-### Error
-
-```json
-{
-    "status": "error",
-    "message": "Error description"
-}
-```
-
----
-
-## Contract Update (2026-04-30)
-
-1. `/generate/references/`:
-- `reference` no longer contains `lesson_topic`.
-- Current `reference` schema:
-```json
-{
-    "section_goal": "string",
-    "points": ["string"],
-    "practice_focus": "string"
-}
-```
-
-2. `/generate/tasks-plan/`:
-- Request now requires top-level `lesson_topic`.
-- `sections[].reference` must use the same schema as `/generate/references/` (without `lesson_topic`).
-- Response format remains the same as current implementation (includes `title`, `reference`, `tasks` for each section).
-
-3. Language default:
-- Explanatory content is generated in Russian by default, unless another language is explicitly requested.
-
----
-
-# 1. Health Check
-
-### GET `/health/`
-
-#### Response
-
-```json
-{
-    "status": "ok"
-}
-```
-
----
-
-# 2. Generate Meta
-
-### POST `/generate/meta/`
-
-Generates lesson meta.
-
-#### Request
-
-```json
-{
-    "user_request": "Present Continuous lesson for 5th grade",
-    "subjects_available": ["English", "Math"],
-    "colors_available": ["blue", "green"],
-    "icons_available": ["book", "pencil"]
-}
-```
-
-#### Response
-
-```json
-{
-    "status": "ok",
-    "topic": "Present Continuous",
-    "subject": "English",
-    "color": "blue",
-    "icon": "book"
-}
-```
-
----
-
-# 3. Generate Sections
-
-### POST `/generate/sections/new/`
-
-Generates lesson sections.
-
-#### Request
-
-```json
-{
-    "user_request": "Present Continuous lesson"
-}
-```
-
-#### Response
-
-```json
-{
-    "status": "ok",
-    "sections": [
-        { "title": "Warm-up" },
-        { "title": "Form Basics" },
-        { "title": "Usage Rules" }
-    ]
-}
-```
-
----
-
-# 4. Improve Sections
-
-### POST `/generate/sections/improve/`
-
-Improves section titles.
-
-#### Request
-
-```json
-{
-    "user_request": "Present Continuous lesson",
-    "sections": [
-        { "title": "Warm-up" },
-        { "title": "Form Basics" },
-        { "title": "Usage Rules" }
-    ],
-    "improvement_request": "Make it more practical"
-}
-```
-
-#### Response
-
-```json
-{
-    "status": "ok",
-    "sections": [
-        { "title": "Quick Start" },
-        { "title": "Practical Forms" },
-        { "title": "Real Usage" }
-    ]
-}
-```
-
----
-
-# 5. Generate References
-
-### POST `/generate/references/`
-
-Generates structured reference for each section.
-Processing mode: one request for all sections (batch), returns aggregated `sections`.
-
-#### Request
-
-```json
-{
-    "user_request": "Present Continuous lesson",
-    "topic": "Present Continuous",
-    "sections": [
-        { "title": "Form Basics" }
-    ]
-}
-```
-
-#### Response
-
-```json
-{
-    "status": "ok",
-    "sections": [
-        {
-            "title": "Form Basics",
-            "reference": {
-                "section_goal": "Teach how to form sentences",
-                "points": [
-                    "am/is/are + verb-ing"
-                ],
-                "practice_focus": "Build sentences"
-            }
-        }
-    ]
-}
-```
-
----
-
-# 6. Generate Tasks Plan
-
-### POST `/generate/tasks-plan/`
-
-Generates task plan (types + purpose).
-Processing mode: one request for all sections (batch), returns aggregated `sections`.
-
-#### Request
-
-```json
-{
-    "lesson_topic": "Present Continuous",
-    "sections": [
-        {
-            "title": "Form Basics",
-            "reference": {
-                "section_goal": "Teach how to form sentences",
-                "points": ["am/is/are + verb-ing"],
-                "practice_focus": "Build sentences"
-            }
-        }
-    ]
-}
-```
-
-#### Response
-
-```json
-{
-    "status": "ok",
-    "sections": [
-        {
-            "title": "Form Basics",
-            "reference": {
-                "section_goal": "Teach how to form sentences",
-                "points": ["am/is/are + verb-ing"],
-                "practice_focus": "Build sentences"
-            },
-            "tasks": [
-                {
-                    "type": "note",
-                    "purpose": "Explain grammar"
-                },
-                {
-                    "type": "fill_gaps",
-                    "purpose": "Practice sentence building"
-                }
-            ]
-        }
-    ]
-}
-```
-
----
-
-# 7. Generate Tasks
-
-### POST `/generate/tasks/`
-
-Generates full tasks for one section.
-
-#### Request
-
-```json
-{
-    "lesson_topic": "Present Continuous",
-    "section_title": "Form Basics",
-    "reference_points": [
-        "am/is/are + verb-ing",
-        "I am reading now",
-        "She is watching TV now"
-    ],
-    "tasks": [
-        { "type": "note", "purpose": "Explain grammar" },
-        { "type": "fill_gaps", "purpose": "Practice" }
-    ]
-}
-```
-
-#### Response
-
-```json
-{
-    "status": "ok",
-    "section": {
-        "title": "Form Basics",
-        "tasks": [
-            {
-                "type": "note",
-                "content": "Use am/is/are..."
-            },
-            {
-                "type": "fill_gaps",
-                "mode": "closed",
-                "text": "She ___ TV now.",
-                "answers": ["is watching"]
-            }
-        ]
-    }
-}
-```
-
----
-
-# 8. Generate Image
-
-### POST `/generate/image/`
-
-Generates image from description.
-
-#### Request
-
-```json
-{
-    "detailed_description": "A bright classroom scene",
-    "size": "1024x1024",
-    "quality": "medium",
-    "response_format": "b64_json"
-}
-```
-
-#### Response
-
-```json
-{
-    "status": "ok",
-    "response_format": "b64_json",
-    "image": "<base64_string>"
-}
-```
-
-#### Notes
-
-- Max size: **15MB**
-- If exceeded → error
-
----
-
-# 9. Generate Audio
-
-### POST `/generate/audio/`
-
-Generates audio from script.
-
-#### Request
-
-```json
-{
-    "audio_type": "dialogue",
-    "voice": "nova",
-    "response_format": "mp3",
-    "speed": 1.0,
-    "script": [
-        { "speaker": "Anna", "text": "Hello!" },
-        { "speaker": "Ben", "text": "Hi!" }
-    ]
-}
-```
-
-#### Response
-
-```json
-{
-    "status": "ok",
-    "response_format": "mp3",
-    "audio_base64": "<base64_string>"
-}
-```
-
-#### Notes
-
-- Max size: **15MB**
-- Script length should not exceed ~3000–4000 characters
-- Monologue → 1 speaker
-- Dialogue → ≥2 speakers, ≥4 replicas
-
----
-
-# Pipeline Overview
-
-```
+```text
 user_request
     ↓
-/generate/meta/
+/generate/brief/
     ↓
-/generate/sections/new/
+/generate/sections/
     ↓
-/generate/references/
-    ↓
-/generate/tasks-plan/
-    ↓
-/generate/tasks/
-    ↓
-(optional)
-/generate/image/
-/generate/audio/
+/generate/style/
 ```
 
----
+`/generate/brief/improve/` can be called whenever the user wants to adjust the brief.
 
-# Errors
+## GET `/health/`
 
-Common reasons:
+Response:
 
-- Invalid API key → 401
-- Invalid input → 422
-- LLM failed validation → retry → error
-- Media > 15MB → error
+```json
+{
+  "status": "ok",
+  "models_available": true
+}
+```
+
+`models_available` is `true` when at least one Groq model in the unified pool is currently usable.
+
+## POST `/generate/brief/`
+
+Creates lesson topic and detailed brief.
+
+Request:
+
+```json
+{
+  "user_request": "A2 travel English lesson with vocabulary for train stations and speaking practice"
+}
+```
+
+Response:
+
+```json
+{
+  "status": "ok",
+  "topic": "Travel English",
+  "brief": {
+    "lesson_goal": "Help the student ask and answer practical train-station questions in English during a one-on-one tutor lesson.",
+    "vocabulary": ["ticket", "platform", "delay", "return ticket"],
+    "grammar": [],
+    "practical_skills": [
+      {"type": "speaking", "title": "Station Role Play"}
+    ]
+  }
+}
+```
+
+## POST `/generate/sections/`
+
+Creates final lesson sections with tasks.
+
+Request:
+
+```json
+{
+  "topic": "Travel English",
+  "brief": {
+    "lesson_goal": "Help the student ask and answer practical train-station questions in English.",
+    "vocabulary": ["ticket", "platform", "delay", "return ticket"],
+    "grammar": [],
+    "practical_skills": [
+      {"type": "speaking", "title": "Station Role Play"},
+      {"type": "writing", "title": "Travel Request"}
+    ]
+  }
+}
+```
+
+Response shape:
+
+```json
+{
+  "status": "ok",
+  "sections": [
+    {
+      "title": "Vocabulary",
+      "tasks": [
+        {
+          "type": "word_list",
+          "pairs": [
+            {"word": "ticket", "translation": "билет"},
+            {"word": "platform", "translation": "платформа"},
+            {"word": "delay", "translation": "задержка"},
+            {"word": "return ticket", "translation": "билет туда и обратно"}
+          ]
+        },
+        {
+          "type": "fill_gaps",
+          "mode": "open",
+          "text": "Complete the sentences.\n1. I need a {{ticket}}.\n2. The train is on the {{platform}}.\n3. There is a {{delay}}.\n4. My {{boarding pass}} is missing.",
+          "answers": ["ticket", "platform", "delay", "boarding pass"]
+        },
+        {
+          "type": "match_cards",
+          "pairs": [
+            {"left": "ticket", "right": "a paper or digital pass for travel"},
+            {"left": "platform", "right": "the place where you wait for a train"},
+            {"left": "delay", "right": "when something is later than planned"}
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+## POST `/generate/style/`
+
+Selects style values strictly from the provided lists.
+
+Request:
+
+```json
+{
+  "topic": "Travel English",
+  "colors_available": ["blue", "green"],
+  "icons_available": ["plane", "book"]
+}
+```
+
+Response:
+
+```json
+{
+  "status": "ok",
+  "color": "blue",
+  "icon": "plane"
+}
+```
+
+## POST `/generate/brief/improve/`
+
+Improves only the needed parts of an existing brief.
+
+Request:
+
+```json
+{
+  "topic": "Travel English",
+  "brief": {
+    "lesson_goal": "Help the student ask and answer practical train-station questions in English.",
+    "vocabulary": ["ticket", "platform", "delay"],
+    "grammar": [],
+    "practical_skills": [
+      {"type": "speaking", "title": "Station Role Play"}
+    ]
+  },
+  "improvement_request": "add more vocabulary"
+}
+```
+
+Response:
+
+```json
+{
+  "status": "ok",
+  "topic": "Travel English",
+  "brief": {
+    "lesson_goal": "Help the student ask and answer practical train-station questions in English.",
+    "vocabulary": ["ticket", "platform", "delay", "return ticket", "single ticket", "timetable"],
+    "grammar": [],
+    "practical_skills": [
+      {"type": "speaking", "title": "Station Role Play"}
+    ]
+  }
+}
+```
+
+## POST `/generate/image/`
+
+Generates an image from a detailed description.
+
+## POST `/generate/audio/`
+
+Generates audio from a monologue or dialogue script. The script text must be 3000 characters or fewer.

@@ -1,47 +1,37 @@
 import logging
 import time
 from pathlib import Path
-from typing import Annotated, Union, Optional
+from typing import Annotated, Optional, Union
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
 from fastapi.responses import Response
 
 from app.config import get_settings
+from app.groq_client import models_available
 from app.schemas import (
     ErrorResponse,
-
-    GenerateMetaRequest,
-    GenerateMetaSuccessResponse,
-
-    GenerateSectionsRequest,
-    GenerateSectionsSuccessResponse,
-    ImproveSectionRequest,
-    ImproveSectionSuccessResponse,
-
-    GenerateReferencesRequest,
-    GenerateReferencesSuccessResponse,
-
-    GenerateTasksPlanRequest,
-    GenerateTasksPlanSuccessResponse,
-
-    GenerateTasksRequest,
-    GenerateTasksSuccessResponse,
-
     GenerateAudioRequest,
     GenerateAudioSuccessResponse,
+    GenerateBriefRequest,
+    GenerateBriefSuccessResponse,
     GenerateImageRequest,
     GenerateImageSuccessResponse,
+    GenerateSectionsRequest,
+    GenerateSectionsSuccessResponse,
+    GenerateStyleRequest,
+    GenerateStyleSuccessResponse,
+    HealthResponse,
+    ImproveBriefRequest,
+    ImproveBriefSuccessResponse,
 )
-from app.services.meta_generator import generate_meta
-from app.services.sections_generator import generate_new_sections, improve_sections
-from app.services.reference_generator import generate_references
-from app.services.tasks_plan_generator import generate_tasks_plan
-from app.services.tasks_generator import generate_tasks
+from app.services.brief_generator import generate_brief, improve_brief
 from app.services.media_generator import generate_audio_file, generate_image_file
+from app.services.sections_generator import generate_sections
+from app.services.style_generator import generate_style
 
 app = FastAPI(
     title="Lesson Generator API",
-    version="0.1.0",
+    version="0.2.0",
 )
 
 logger = logging.getLogger(__name__)
@@ -76,8 +66,8 @@ def _mask_key(value: Optional[str]) -> str:
 
 
 def verify_api_key(
-        request: Request,
-        x_api_key: Annotated[Optional[str], Header(alias="X-API-Key")] = None,
+    request: Request,
+    x_api_key: Annotated[Optional[str], Header(alias="X-API-Key")] = None,
 ) -> None:
     settings = get_settings()
     expected_key = settings.API_KEY
@@ -142,65 +132,49 @@ async def log_api_calls(request: Request, call_next):
     )
 
 
-@app.get("/health/")
-def health() -> dict[str, str]:
+@app.get("/health/", response_model=HealthResponse)
+def health() -> dict[str, object]:
+    available = models_available()
     return {
-        "status": "ok",
+        "status": "ok" if available else "degraded",
+        "models_available": available,
     }
 
 
 @app.post(
-    "/generate/meta/",
-    response_model=Union[GenerateMetaSuccessResponse, ErrorResponse],
+    "/generate/brief/",
+    response_model=Union[GenerateBriefSuccessResponse, ErrorResponse],
     dependencies=[Depends(verify_api_key)],
 )
-async def generate_meta_endpoint(request_data: GenerateMetaRequest):
-    return await generate_meta(request_data)
+async def generate_brief_endpoint(request_data: GenerateBriefRequest):
+    return await generate_brief(request_data)
 
 
 @app.post(
-    "/generate/sections/new/",
+    "/generate/sections/",
     response_model=Union[GenerateSectionsSuccessResponse, ErrorResponse],
     dependencies=[Depends(verify_api_key)],
 )
-async def generate_sections_new_endpoint(request_data: GenerateSectionsRequest):
-    return await generate_new_sections(request_data)
+async def generate_sections_endpoint(request_data: GenerateSectionsRequest):
+    return await generate_sections(request_data)
 
 
 @app.post(
-    "/generate/sections/improve/",
-    response_model=Union[ImproveSectionSuccessResponse, ErrorResponse],
+    "/generate/style/",
+    response_model=Union[GenerateStyleSuccessResponse, ErrorResponse],
     dependencies=[Depends(verify_api_key)],
 )
-async def improve_sections_endpoint(request_data: ImproveSectionRequest):
-    return await improve_sections(request_data)
+async def generate_style_endpoint(request_data: GenerateStyleRequest):
+    return await generate_style(request_data)
 
 
 @app.post(
-    "/generate/references/",
-    response_model=Union[GenerateReferencesSuccessResponse, ErrorResponse],
+    "/generate/brief/improve/",
+    response_model=Union[ImproveBriefSuccessResponse, ErrorResponse],
     dependencies=[Depends(verify_api_key)],
 )
-async def generate_references_endpoint(request_data: GenerateReferencesRequest):
-    return await generate_references(request_data)
-
-
-@app.post(
-    "/generate/tasks-plan/",
-    response_model=Union[GenerateTasksPlanSuccessResponse, ErrorResponse],
-    dependencies=[Depends(verify_api_key)],
-)
-async def generate_tasks_plan_endpoint(request_data: GenerateTasksPlanRequest):
-    return await generate_tasks_plan(request_data)
-
-
-@app.post(
-    "/generate/tasks/",
-    response_model=Union[GenerateTasksSuccessResponse, ErrorResponse],
-    dependencies=[Depends(verify_api_key)],
-)
-async def generate_tasks_endpoint(request_data: GenerateTasksRequest):
-    return await generate_tasks(request_data)
+async def improve_brief_endpoint(request_data: ImproveBriefRequest):
+    return await improve_brief(request_data)
 
 
 @app.post(

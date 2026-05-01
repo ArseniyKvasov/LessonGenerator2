@@ -133,7 +133,7 @@ async def generate_pollinations_audio(
     settings = get_settings()
 
     try:
-        async with httpx.AsyncClient(timeout=120) as client:
+        async with httpx.AsyncClient(timeout=60) as client:
             response = await client.post(
                 f"{POLLINATIONS_BASE_URL}/v1/audio/speech",
                 headers={

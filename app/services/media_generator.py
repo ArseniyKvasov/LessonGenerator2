@@ -35,10 +35,10 @@ async def generate_image_file(request_data: GenerateImageRequest) -> dict[str, A
 async def generate_audio_file(request_data: GenerateAudioRequest) -> dict[str, Any]:
     audio_text = build_audio_text(request_data)
 
-    if len(audio_text) > 4096:
+    if len(audio_text) > 3000:
         return {
             "status": "error",
-            "message": "Audio script is too long. Maximum is 4096 characters.",
+            "message": "Audio script is too long. Maximum is 3000 characters.",
         }
 
     return await generate_pollinations_audio(

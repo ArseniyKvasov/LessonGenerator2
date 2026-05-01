@@ -1,313 +1,171 @@
-# Tasks JSON
+# Task JSON
 
-## Common rule
-
-Every task must have a `type`.
-
-Available task types:
-
-```json
-[
-    "note",
-    "reading_text",
-    "word_list",
-    "test",
-    "true_or_false",
-    "fill_gaps",
-    "image",
-    "match_cards",
-    "audio",
-    "speaking_cards",
-    "words_to_pronounce"
-]
-```
-
----
-
-# 1. note
-
-Markdown + LaTeX content. `\n` is allowed for line breaks.  
-By default, explanations should be in Russian unless explicitly requested otherwise.
+All generated lesson sections use this shape:
 
 ```json
 {
-    "type": "note",
-    "content": "Use **am/is/are** + verb-ing.\n\nExample: She is reading.\n\nFormula: $am/is/are + V_{ing}$"
+  "title": "Section title",
+  "tasks": []
 }
 ```
 
----
+## `note`
 
-# 2. reading_text
-
-Markdown content. `\n` is allowed for line breaks.
+Markdown support material or student instruction.
 
 ```json
 {
-    "type": "reading_text",
-    "content": "It is Saturday morning. **Tom is playing football** in the park. His sister is reading a book."
+  "type": "note",
+  "content": "**Rule**\n\nExample sentence."
 }
 ```
 
----
+## `word_list`
 
-# 3. word_list
-
-List of `word/phrase -> Russian translation` pairs.  
-Must contain 5-15 pairs.
+English word or phrase with Russian translation.
 
 ```json
 {
-    "type": "word_list",
-    "pairs": [
-        {
-            "word": "run",
-            "translation": "бегать"
-        },
-        {
-            "word": "read",
-            "translation": "читать"
-        }
-    ]
+  "type": "word_list",
+  "pairs": [
+    {"word": "ticket", "translation": "билет"},
+    {"word": "platform", "translation": "платформа"},
+    {"word": "delay", "translation": "задержка"}
+  ]
 }
 ```
 
----
+## `fill_gaps`
 
-# 4. test
-
-Quiz with 3–6 questions.  
-Each question must have 2–4 options.  
-`question` supports Markdown + LaTeX.  
-Each question must have exactly one correct option.
+Open mode is used for vocabulary. Closed mode is used for grammar.
+Rules:
+- 4-10 gaps per task
+- one gap per sentence is recommended
+- answers order must match gap order
+- base words (if needed) stay in text, for example `(cook)`
+- app parses `___` into `{{answer}}` programmatically
 
 ```json
 {
-    "type": "test",
-    "questions": [
-        {
-            "question": "Choose the correct form: **She ___ TV now.**",
-            "options": [
-                {
-                    "option": "is watching",
-                    "is_correct": true
-                },
-                {
-                    "option": "watches",
-                    "is_correct": false
-                },
-                {
-                    "option": "watch",
-                    "is_correct": false
-                }
-            ]
-        }
-    ]
+  "type": "fill_gaps",
+  "mode": "closed",
+  "text": "1. He {{is cooking}} (cook) dinner now.\n2. They {{are studying}} (study) at home.\n3. I {{am drinking}} (drink) tea.\n4. We {{are waiting}} (wait) outside.",
+  "answers": ["is cooking", "are studying", "am drinking", "are waiting"]
 }
 ```
 
----
+## `match_cards`
 
-# 5. true_or_false
-
-Statements with boolean answers.  
-`statement` supports Markdown + LaTeX.
+Phrase matching or word-definition matching.
 
 ```json
 {
-    "type": "true_or_false",
-    "statements": [
-        {
-            "statement": "**Present Continuous** is used for actions happening now.",
-            "is_true": true
-        },
-        {
-            "statement": "We use Present Continuous for habits.",
-            "is_true": false
-        }
-    ]
+  "type": "match_cards",
+  "pairs": [
+    {"left": "platform", "right": "the place where you wait for a train"},
+    {"left": "delay", "right": "when something is later than planned"},
+    {"left": "ticket", "right": "a paper or digital pass for travel"}
+  ]
 }
 ```
 
----
+## `test`
 
-# 6. fill_gaps
-
-Text with gaps and a separate list of answers.
-
-Markdown + LaTeX is supported. `\n` is allowed for line breaks.
-
-- `text` — text with gaps marked as `___`
-- `answers` — list of correct answers in order
-
-There are two modes:
-
-- `open` — students see the answers and must match them to gaps
-- `closed` — students must fill gaps without seeing answers
+Multiple choice. The application shuffles options programmatically.
 
 ```json
 {
-    "type": "fill_gaps",
-    "mode": "closed",
-    "text": "Complete the sentences.\n\n1. She ___ TV now.\n2. They ___ football.\n\nFormula: $am/is/are + V_{ing}$",
-    "answers": [
-        "is watching",
-        "are playing"
-    ]
+  "type": "test",
+  "questions": [
+    {
+      "question": "Choose the correct sentence.",
+      "options": [
+        {"option": "She is reading.", "is_correct": true},
+        {"option": "She reading.", "is_correct": false}
+      ]
+    },
+    {
+      "question": "Choose the correct form: They ___.",
+      "options": [
+        {"option": "are working", "is_correct": true},
+        {"option": "is working", "is_correct": false}
+      ]
+    },
+    {
+      "question": "Choose the correct question.",
+      "options": [
+        {"option": "What are you doing?", "is_correct": true},
+        {"option": "What you are doing?", "is_correct": false}
+      ]
+    }
+  ]
 }
 ```
 
-Open example:
+## `true_false`
+
+Text or script comprehension statements.
 
 ```json
 {
-    "type": "fill_gaps",
-    "mode": "open",
-    "text": "Complete the sentences.\n\n1. I ___ a book.\n2. He ___ in the park.\n3. They ___ football.",
-    "answers": [
-        "am reading",
-        "is running",
-        "are playing"
-    ]
+  "type": "true_false",
+  "statements": [
+    {"statement": "The speaker needs a ticket.", "is_true": true},
+    {"statement": "The train is early.", "is_true": false},
+    {"statement": "The speaker asks for help.", "is_true": true}
+  ]
 }
 ```
 
----
+## `text_input`
 
-# 7. image
-
-Detailed image description only.
+Writing answer box.
 
 ```json
 {
-    "type": "image",
-    "detailed_description": "A bright classroom scene with five students. One student is writing on the board, two students are reading books, one student is looking out of the window, and one student is asking the teacher a question."
+  "type": "text_input",
+  "title": "Short reply",
+  "default_text": ""
 }
 ```
 
----
+## `image`
 
-# 8. match_cards
-
-Pairs for matching.
+Generated image stored directly in the task.
 
 ```json
 {
-    "type": "match_cards",
-    "pairs": [
-        {
-            "left": "I",
-            "right": "am reading"
-        },
-        {
-            "left": "She",
-            "right": "is playing"
-        },
-        {
-            "left": "They",
-            "right": "are running"
-        }
-    ]
+  "type": "image",
+  "detailed_description": "A train station scene for ESL speaking practice.",
+  "response_format": "b64_json",
+  "image": "..."
 }
 ```
 
----
+## `audio`
 
-# 9. audio
-
-Audio script.
-
-`audio_type` can be:
-
-```json
-"monologue"
-```
-
----
-
-# 10. speaking_cards
-
-Array of short speaking prompts.
+Generated audio stored directly in the task.
 
 ```json
 {
-    "type": "speaking_cards",
-    "speaking_cards": [
-        "Describe what you are doing right now.",
-        "Ask your partner 3 questions about their weekend.",
-        "Explain your morning routine in 4 sentences."
-    ]
+  "type": "audio",
+  "audio_type": "dialogue",
+  "script": [
+    {"speaker": "A", "text": "Where is platform two?"},
+    {"speaker": "B", "text": "It is over there."}
+  ],
+  "response_format": "mp3",
+  "audio_base64": "..."
 }
 ```
 
----
+## `speaking_cards`
 
-# 11. words_to_pronounce
-
-Array of sound groups and words to pronounce.
+Markdown speaking prompt with numbered questions.
 
 ```json
 {
-    "type": "words_to_pronounce",
-    "words_to_pronounce": [
-        {
-            "sound": "/th/",
-            "words": ["think", "three", "thank"]
-        },
-        {
-            "sound": "/iː/",
-            "words": ["see", "green", "teacher"]
-        }
-    ]
-}
-```
-
-or:
-
-```json
-"dialogue"
-```
-
-The script is always an array of replicas.
-
-## Monologue
-
-```json
-{
-    "type": "audio",
-    "audio_type": "monologue",
-    "script": [
-        {
-            "speaker": "Narrator",
-            "text": "It is Sunday morning. I am sitting in my room. My brother is playing computer games, and my mother is cooking breakfast."
-        }
-    ]
-}
-```
-
-## Dialogue
-
-```json
-{
-    "type": "audio",
-    "audio_type": "dialogue",
-    "script": [
-        {
-            "speaker": "Anna",
-            "text": "Look! Tom is playing football."
-        },
-        {
-            "speaker": "Ben",
-            "text": "Yes, and Lisa is reading a book."
-        },
-        {
-            "speaker": "Anna",
-            "text": "What is Mike doing?"
-        },
-        {
-            "speaker": "Ben",
-            "text": "He is talking to the teacher."
-        }
-    ]
+  "type": "speaking_cards",
+  "content": "*Read and answer the questions*\n\n1. What do you need at a train station?\n2. How can you ask for help?\n3. What would you say if your train is late?"
 }
 ```

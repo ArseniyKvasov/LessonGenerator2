@@ -1,55 +1,62 @@
-from typing import Any, Literal, Annotated, Union, Optional
+import re
+from typing import Annotated, Any, Literal, Optional, Union
 
 from pydantic import BaseModel, Field, field_validator
 
 
-class GenerateMetaRequest(BaseModel):
-    user_request: str = Field(min_length=1)
-    subjects_available: list[str]
-    colors_available: list[str]
-    icons_available: list[str]
-
-    @field_validator("user_request")
-    @classmethod
-    def validate_user_request(cls, value: str) -> str:
-        cleaned = value.strip()
-
-        if not cleaned:
-            raise ValueError("user_request cannot be empty")
-
-        return cleaned
-
-    @field_validator(
-        "subjects_available",
-        "colors_available",
-        "icons_available",
-    )
-    @classmethod
-    def validate_available_values(
-        cls,
-        values: list[str],
-    ) -> list[str]:
-        if not values:
-            raise ValueError("List cannot be empty")
-
-        cleaned_values = [
-            value.strip()
-            for value in values
-            if isinstance(value, str) and value.strip()
-        ]
-
-        if not cleaned_values:
-            raise ValueError("List cannot contain only empty values")
-
-        return cleaned_values
+PracticalSkillType = Literal["reading", "listening", "writing", "speaking", "pronunciation"]
+TaskType = Literal[
+    "note",
+    "word_list",
+    "fill_gaps",
+    "match_cards",
+    "test",
+    "true_false",
+    "text_input",
+    "image",
+    "audio",
+    "speaking_cards",
+]
 
 
-class GenerateMetaSuccessResponse(BaseModel):
-    status: Literal["ok"] = "ok"
-    topic: str
-    subject: str
-    color: str
-    icon: str
+def _clean_text(value: str) -> str:
+    cleaned = value.strip()
+    if not cleaned:
+        raise ValueError("Field cannot be empty")
+    return cleaned
+
+
+def _clean_string_list(values: Any) -> list[str]:
+    if values is None:
+        return []
+    if not isinstance(values, list):
+        raise ValueError("Expected a list")
+
+    cleaned: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        if not isinstance(value, str):
+            continue
+        item = value.strip()
+        if not item:
+            continue
+        key = item.casefold()
+        if key not in seen:
+            cleaned.append(item)
+            seen.add(key)
+    return cleaned
+
+
+def topic_word_count(topic: str) -> int:
+    return len(re.findall(r"[A-Za-zА-Яа-я0-9]+(?:[-'][A-Za-zА-Яа-я0-9]+)?", topic))
+
+
+def validate_topic(value: str) -> str:
+    cleaned = _clean_text(value)
+    words = topic_word_count(cleaned)
+    if words < 2 or words > 4:
+        raise ValueError("topic must contain 2-4 words")
+    return cleaned
 
 
 class ErrorResponse(BaseModel):
@@ -57,236 +64,232 @@ class ErrorResponse(BaseModel):
     message: str
 
 
-class GenerateSuccessResponse(BaseModel):
-    status: Literal["ok"] = "ok"
-    data: dict[str, Any]
+class HealthResponse(BaseModel):
+    status: Literal["ok", "degraded"]
+    models_available: bool
 
 
-class GenerateErrorResponse(BaseModel):
-    status: Literal["error"] = "error"
-    message: str
+DEFAULT_PRACTICAL_SKILL_TITLES: dict[str, str] = {
+    "reading": "Reading Text",
+    "listening": "Listening Practice",
+    "writing": "Writing Task",
+    "speaking": "Speaking Practice",
+    "pronunciation": "Pronunciation Sounds",
+}
 
 
-class SectionSchema(BaseModel):
-    title: str = Field(min_length=1, max_length=40)
+class PracticalSkillItem(BaseModel):
+    type: PracticalSkillType
+    title: str = Field(min_length=1, max_length=100)
 
     @field_validator("title")
     @classmethod
     def validate_title(cls, value: str) -> str:
-        cleaned = value.strip()
+        return _clean_text(value)
 
-        if not cleaned:
-            raise ValueError("Section title cannot be empty")
+
+class LessonBrief(BaseModel):
+    lesson_goal: str = Field(min_length=1)
+    vocabulary: list[str] = Field(default_factory=list)
+    grammar: list[str] = Field(default_factory=list)
+    practical_skills: list[PracticalSkillItem] = Field(default_factory=list)
+
+    @field_validator("lesson_goal")
+    @classmethod
+    def validate_goal(cls, value: str) -> str:
+        return _clean_text(value)
+
+    @field_validator("vocabulary", "grammar", mode="before")
+    @classmethod
+    def clean_lists(cls, values: Any) -> list[str]:
+        return _clean_string_list(values)
+
+    @field_validator("practical_skills", mode="before")
+    @classmethod
+    def clean_skills(cls, values: Any) -> list[dict[str, str]]:
+        if values is None:
+            return []
+        if not isinstance(values, list):
+            raise ValueError("practical_skills must be a list")
+
+        cleaned: list[dict[str, str]] = []
+        seen: set[str] = set()
+        for value in values:
+            if isinstance(value, str):
+                skill_type = value.strip()
+                title = DEFAULT_PRACTICAL_SKILL_TITLES.get(skill_type, skill_type)
+            elif isinstance(value, dict):
+                raw_type = value.get("type")
+                raw_title = value.get("title")
+                if not isinstance(raw_type, str):
+                    continue
+                skill_type = raw_type.strip()
+                title = raw_title.strip() if isinstance(raw_title, str) and raw_title.strip() else DEFAULT_PRACTICAL_SKILL_TITLES.get(skill_type, skill_type)
+            else:
+                continue
+
+            if not skill_type:
+                continue
+
+            key = skill_type.casefold()
+            if key in seen:
+                continue
+            cleaned.append({"type": skill_type, "title": title})
+            seen.add(key)
 
         return cleaned
 
 
-class GenerateSectionsRequest(BaseModel):
+class GenerateBriefRequest(BaseModel):
     user_request: str = Field(min_length=1)
 
     @field_validator("user_request")
     @classmethod
     def validate_user_request(cls, value: str) -> str:
-        cleaned = value.strip()
-
-        if not cleaned:
-            raise ValueError("user_request cannot be empty")
-
-        return cleaned
+        return _clean_text(value)
 
 
-class ImproveSectionRequest(BaseModel):
-    user_request: str = Field(min_length=1)
-    sections: list[SectionSchema] = Field(min_length=1)
+class GenerateBriefSuccessResponse(BaseModel):
+    status: Literal["ok"] = "ok"
+    topic: str
+    brief: LessonBrief
+
+    @field_validator("topic")
+    @classmethod
+    def validate_response_topic(cls, value: str) -> str:
+        return validate_topic(value)
+
+
+class ImproveBriefRequest(BaseModel):
+    topic: str
+    brief: LessonBrief
     improvement_request: str = Field(min_length=1)
 
-    @field_validator("user_request", "improvement_request")
+    @field_validator("topic")
     @classmethod
-    def validate_text_fields(cls, value: str) -> str:
-        cleaned = value.strip()
+    def validate_request_topic(cls, value: str) -> str:
+        return validate_topic(value)
 
+    @field_validator("improvement_request")
+    @classmethod
+    def validate_improvement_request(cls, value: str) -> str:
+        return _clean_text(value)
+
+
+class ImproveBriefSuccessResponse(GenerateBriefSuccessResponse):
+    pass
+
+
+class GenerateStyleRequest(BaseModel):
+    topic: str
+    colors_available: list[str]
+    icons_available: list[str]
+
+    @field_validator("topic")
+    @classmethod
+    def validate_request_topic(cls, value: str) -> str:
+        return validate_topic(value)
+
+    @field_validator("colors_available", "icons_available", mode="before")
+    @classmethod
+    def validate_available_values(cls, values: Any) -> list[str]:
+        cleaned = _clean_string_list(values)
         if not cleaned:
-            raise ValueError("Field cannot be empty")
-
+            raise ValueError("List cannot be empty")
         return cleaned
 
 
-class GenerateSectionsSuccessResponse(BaseModel):
+class GenerateStyleSuccessResponse(BaseModel):
     status: Literal["ok"] = "ok"
-    sections: list[SectionSchema]
+    color: str
+    icon: str
 
 
-class ImproveSectionSuccessResponse(BaseModel):
-    status: Literal["ok"] = "ok"
-    sections: list[SectionSchema]
+class GenerateSectionsRequest(BaseModel):
+    topic: str
+    brief: LessonBrief
 
-
-class SectionReference(BaseModel):
-    section_goal: str
-    points: list[str]
-    practice_focus: str
-
-
-class SectionWithReference(BaseModel):
-    title: str = Field(min_length=1, max_length=40)
-    reference: SectionReference
-
-    @field_validator("title")
+    @field_validator("topic")
     @classmethod
-    def validate_title(cls, value: str) -> str:
-        cleaned = value.strip()
-
-        if not cleaned:
-            raise ValueError("Section title cannot be empty")
-
-        return cleaned
-
-
-class GenerateReferencesRequest(BaseModel):
-    user_request: str = Field(min_length=1)
-    topic: str = Field(min_length=1)
-    sections: list[SectionSchema]
-
-    @field_validator("user_request", "topic")
-    @classmethod
-    def validate_text_fields(cls, value: str) -> str:
-        cleaned = value.strip()
-
-        if not cleaned:
-            raise ValueError("Field cannot be empty")
-
-        return cleaned
-
-
-class GenerateSectionReferenceRequest(BaseModel):
-    user_request: str = Field(min_length=1)
-    topic: str = Field(min_length=1)
-    section: SectionSchema
-
-    @field_validator("user_request", "topic")
-    @classmethod
-    def validate_text_fields(cls, value: str) -> str:
-        cleaned = value.strip()
-
-        if not cleaned:
-            raise ValueError("Field cannot be empty")
-
-        return cleaned
-
-
-class GenerateReferencesSuccessResponse(BaseModel):
-    status: Literal["ok"] = "ok"
-    sections: list[SectionWithReference]
-
-
-TaskType = Literal[
-    "note",
-    "reading_text",
-    "word_list",
-    "test",
-    "true_or_false",
-    "fill_gaps",
-    "image",
-    "match_cards",
-    "audio",
-    "speaking_cards",
-    "words_to_pronounce",
-]
-
-
-class TaskPlanItem(BaseModel):
-    type: TaskType
-
-    purpose: str = Field(min_length=1)
-
-    @field_validator("purpose")
-    @classmethod
-    def validate_purpose(cls, value: str) -> str:
-        cleaned = value.strip()
-
-        if not cleaned:
-            raise ValueError("purpose cannot be empty")
-
-        return cleaned
-
-
-class SectionTaskPlan(BaseModel):
-    title: str = Field(min_length=1, max_length=40)
-
-    reference: SectionReference
-
-    tasks: list[TaskPlanItem]
-
-
-class GenerateTasksPlanRequest(BaseModel):
-    lesson_topic: str = Field(min_length=1)
-    sections: list[SectionWithReference] = Field(min_length=1)
-
-    @field_validator("lesson_topic")
-    @classmethod
-    def validate_lesson_topic(cls, value: str) -> str:
-        cleaned = value.strip()
-
-        if not cleaned:
-            raise ValueError("lesson_topic cannot be empty")
-
-        return cleaned
-
-
-class GenerateSectionTasksPlanRequest(BaseModel):
-    lesson_topic: str = Field(min_length=1)
-    section: SectionWithReference
-
-
-class GenerateTasksPlanSuccessResponse(BaseModel):
-    status: Literal["ok"] = "ok"
-
-    sections: list[SectionTaskPlan]
-
-
-class NoteTask(BaseModel):
-    type: Literal["note"]
-    content: str = Field(
-        min_length=1,
-        description=(
-            "Explanation text in Russian by default (unless explicitly requested otherwise). "
-            "Supports Markdown, LaTeX and \\n for line breaks."
-        ),
-    )
-
-
-class ReadingTextTask(BaseModel):
-    type: Literal["reading_text"]
-    content: str = Field(
-        min_length=1,
-        description="Reading text supports Markdown and \\n for line breaks.",
-    )
+    def validate_request_topic(cls, value: str) -> str:
+        return validate_topic(value)
 
 
 class WordPair(BaseModel):
-    word: str = Field(
-        min_length=1,
-        description="Word or phrase in source language.",
-    )
-    translation: str = Field(
-        min_length=1,
-        description="Russian translation for the word or phrase.",
-    )
+    word: str = Field(min_length=1)
+    translation: str = Field(min_length=1)
+
+    @field_validator("word", "translation")
+    @classmethod
+    def validate_text_fields(cls, value: str) -> str:
+        return _clean_text(value)
 
 
 class WordListTask(BaseModel):
     type: Literal["word_list"]
-    pairs: list[WordPair] = Field(min_length=3, max_length=20)
+    pairs: list[WordPair] = Field(min_length=1, max_length=20)
+
+
+class FillGapsTask(BaseModel):
+    type: Literal["fill_gaps"]
+    mode: Literal["open", "closed"]
+    text: str = Field(min_length=1)
+    answers: list[str] = Field(min_length=1, max_length=12)
+
+    @field_validator("text")
+    @classmethod
+    def validate_text(cls, value: str) -> str:
+        return _clean_text(value)
+
+    @field_validator("answers", mode="before")
+    @classmethod
+    def clean_lists(cls, values: Any) -> list[str]:
+        return _clean_string_list(values)
+
+
+class MatchPair(BaseModel):
+    left: str = Field(min_length=1)
+    right: str = Field(min_length=1)
+
+    @field_validator("left", "right")
+    @classmethod
+    def validate_text_fields(cls, value: str) -> str:
+        return _clean_text(value)
+
+
+class MatchCardsTask(BaseModel):
+    type: Literal["match_cards"]
+    pairs: list[MatchPair] = Field(min_length=3, max_length=12)
+
+
+class NoteTask(BaseModel):
+    type: Literal["note"]
+    content: str = Field(min_length=1)
+
+    @field_validator("content")
+    @classmethod
+    def validate_content(cls, value: str) -> str:
+        return _clean_text(value)
 
 
 class TestOption(BaseModel):
     option: str = Field(min_length=1)
     is_correct: bool
 
+    @field_validator("option")
+    @classmethod
+    def validate_option(cls, value: str) -> str:
+        return _clean_text(value)
+
 
 class TestQuestion(BaseModel):
     question: str = Field(min_length=1)
     options: list[TestOption] = Field(min_length=2, max_length=4)
+
+    @field_validator("question")
+    @classmethod
+    def validate_question(cls, value: str) -> str:
+        return _clean_text(value)
 
 
 class TestTask(BaseModel):
@@ -298,121 +301,99 @@ class TrueFalseStatement(BaseModel):
     statement: str = Field(min_length=1)
     is_true: bool
 
+    @field_validator("statement")
+    @classmethod
+    def validate_statement(cls, value: str) -> str:
+        return _clean_text(value)
+
 
 class TrueFalseTask(BaseModel):
-    type: Literal["true_or_false"]
-    statements: list[TrueFalseStatement] = Field(min_length=3, max_length=8)
+    type: Literal["true_false"]
+    statements: list[TrueFalseStatement] = Field(min_length=3, max_length=6)
 
 
-class FillGapsTask(BaseModel):
-    type: Literal["fill_gaps"]
-    mode: Literal["open", "closed"]
-    text: str = Field(
-        min_length=1,
-        description="Text with gaps marked as ___; supports Markdown, LaTeX and \\n for line breaks.",
-    )
-    answers: list[str] = Field(min_length=1)
+class TextInputTask(BaseModel):
+    type: Literal["text_input"]
+    title: str = Field(min_length=1, max_length=80)
+    default_text: str = ""
+
+    @field_validator("title")
+    @classmethod
+    def validate_title(cls, value: str) -> str:
+        return _clean_text(value)
 
 
 class ImageTask(BaseModel):
     type: Literal["image"]
     detailed_description: str = Field(min_length=1)
+    response_format: Literal["url", "b64_json"] = "b64_json"
+    image: str = Field(min_length=1)
+
+    @field_validator("detailed_description", "image")
+    @classmethod
+    def validate_text_fields(cls, value: str) -> str:
+        return _clean_text(value)
 
 
-class MatchPair(BaseModel):
-    left: str = Field(min_length=1)
-    right: str = Field(min_length=1)
-
-
-class MatchCardsTask(BaseModel):
-    type: Literal["match_cards"]
-    pairs: list[MatchPair] = Field(min_length=3, max_length=12)
-
-
-class AudioReplica(BaseModel):
+class AudioScriptItem(BaseModel):
     speaker: str = Field(min_length=1)
     text: str = Field(min_length=1)
+
+    @field_validator("speaker", "text")
+    @classmethod
+    def validate_text_fields(cls, value: str) -> str:
+        return _clean_text(value)
 
 
 class AudioTask(BaseModel):
     type: Literal["audio"]
     audio_type: Literal["monologue", "dialogue"]
-    script: list[AudioReplica] = Field(min_length=1)
+    script: list[AudioScriptItem] = Field(min_length=1)
+    response_format: Literal["mp3", "opus", "aac", "flac", "wav", "pcm"] = "mp3"
+    audio_base64: str = Field(min_length=1)
 
 
 class SpeakingCardsTask(BaseModel):
     type: Literal["speaking_cards"]
-    speaking_cards: list[str] = Field(min_length=3, max_length=20)
+    content: str = Field(min_length=1)
 
-
-class WordsToPronounceItem(BaseModel):
-    sound: str = Field(min_length=1)
-    words: list[str] = Field(min_length=1, max_length=20)
-
-
-class WordsToPronounceTask(BaseModel):
-    type: Literal["words_to_pronounce"]
-    words_to_pronounce: list[WordsToPronounceItem] = Field(min_length=1, max_length=12)
+    @field_validator("content")
+    @classmethod
+    def validate_content(cls, value: str) -> str:
+        return _clean_text(value)
 
 
 GeneratedTask = Annotated[
     Union[
         NoteTask,
-        ReadingTextTask,
         WordListTask,
+        FillGapsTask,
+        MatchCardsTask,
         TestTask,
         TrueFalseTask,
-        FillGapsTask,
+        TextInputTask,
         ImageTask,
-        MatchCardsTask,
         AudioTask,
         SpeakingCardsTask,
-        WordsToPronounceTask,
     ],
     Field(discriminator="type"),
 ]
 
 
-class SectionWithGeneratedTasks(BaseModel):
-    title: str = Field(min_length=1, max_length=40)
+class LessonSection(BaseModel):
+    title: str = Field(min_length=1, max_length=80)
     tasks: list[GeneratedTask] = Field(min_length=1)
 
-
-class GenerateTasksRequest(BaseModel):
-    lesson_topic: str = Field(min_length=1)
-    section_title: str = Field(min_length=1, max_length=40)
-    reference_points: list[str] = Field(min_length=1)
-    tasks: list[TaskPlanItem] = Field(min_length=1)
-
-    @field_validator("lesson_topic", "section_title")
+    @field_validator("title")
     @classmethod
-    def validate_text_fields(cls, value: str) -> str:
-        cleaned = value.strip()
-
-        if not cleaned:
-            raise ValueError("Field cannot be empty")
-
-        return cleaned
-
-    @field_validator("reference_points")
-    @classmethod
-    def validate_reference_points(cls, values: list[str]) -> list[str]:
-        cleaned_values = [
-            value.strip()
-            for value in values
-            if isinstance(value, str) and value.strip()
-        ]
-
-        if not cleaned_values:
-            raise ValueError("reference_points cannot be empty")
-
-        return cleaned_values
+    def validate_title(cls, value: str) -> str:
+        return _clean_text(value)
 
 
-class GenerateTasksSuccessResponse(BaseModel):
+class GenerateSectionsSuccessResponse(BaseModel):
     status: Literal["ok"] = "ok"
-    section: SectionWithGeneratedTasks
-    
+    sections: list[LessonSection] = Field(min_length=1)
+
 
 class GenerateImageRequest(BaseModel):
     detailed_description: str = Field(min_length=1)
@@ -423,23 +404,13 @@ class GenerateImageRequest(BaseModel):
     @field_validator("detailed_description")
     @classmethod
     def validate_detailed_description(cls, value: str) -> str:
-        cleaned = value.strip()
-
-        if not cleaned:
-            raise ValueError("detailed_description cannot be empty")
-
-        return cleaned
+        return _clean_text(value)
 
 
 class GenerateImageSuccessResponse(BaseModel):
     status: Literal["ok"] = "ok"
     response_format: Literal["url", "b64_json"]
     image: str
-
-
-class AudioScriptItem(BaseModel):
-    speaker: str = Field(min_length=1)
-    text: str = Field(min_length=1)
 
 
 class GenerateAudioRequest(BaseModel):
