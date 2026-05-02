@@ -3,7 +3,7 @@ import time
 from pathlib import Path
 from typing import Annotated, Optional, Union
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
+from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException, Request, status
 from fastapi.responses import Response
 
 from app.config import get_settings
@@ -23,10 +23,13 @@ from app.schemas import (
     HealthResponse,
     ImproveBriefRequest,
     ImproveBriefSuccessResponse,
+    JobCreateResponse,
+    JobStatusResponse,
 )
 from app.services.brief_generator import generate_brief, improve_brief
 from app.services.media_generator import generate_audio_file, generate_image_file
 from app.services.sections_generator import generate_sections
+from app.services.jobs import create_job, get_job, run_job
 from app.services.style_generator import generate_style
 
 app = FastAPI(
@@ -55,6 +58,16 @@ def _configure_api_file_logger() -> None:
 
 
 _configure_api_file_logger()
+
+
+def _enqueue_generation_job(background_tasks: BackgroundTasks, job_type: str, handler):
+    job = create_job(job_type)
+    background_tasks.add_task(run_job, job["job_id"], handler)
+    return {
+        "status": "queued",
+        "job_id": job["job_id"],
+        "job_type": job["job_type"],
+    }
 
 
 def _mask_key(value: Optional[str]) -> str:
@@ -139,6 +152,117 @@ def health() -> dict[str, object]:
         "status": "ok" if available else "degraded",
         "models_available": available,
     }
+
+
+@app.get(
+    "/jobs/{job_id}/",
+    response_model=JobStatusResponse,
+    dependencies=[Depends(verify_api_key)],
+)
+def get_generation_job(job_id: str):
+    job = get_job(job_id)
+    if job is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Job not found",
+        )
+    return job
+
+
+@app.post(
+    "/jobs/generate/brief/",
+    response_model=JobCreateResponse,
+    dependencies=[Depends(verify_api_key)],
+)
+async def generate_brief_job_endpoint(
+    request_data: GenerateBriefRequest,
+    background_tasks: BackgroundTasks,
+):
+    return _enqueue_generation_job(
+        background_tasks,
+        "generate_brief",
+        lambda: generate_brief(request_data),
+    )
+
+
+@app.post(
+    "/jobs/generate/sections/",
+    response_model=JobCreateResponse,
+    dependencies=[Depends(verify_api_key)],
+)
+async def generate_sections_job_endpoint(
+    request_data: GenerateSectionsRequest,
+    background_tasks: BackgroundTasks,
+):
+    return _enqueue_generation_job(
+        background_tasks,
+        "generate_sections",
+        lambda: generate_sections(request_data),
+    )
+
+
+@app.post(
+    "/jobs/generate/style/",
+    response_model=JobCreateResponse,
+    dependencies=[Depends(verify_api_key)],
+)
+async def generate_style_job_endpoint(
+    request_data: GenerateStyleRequest,
+    background_tasks: BackgroundTasks,
+):
+    return _enqueue_generation_job(
+        background_tasks,
+        "generate_style",
+        lambda: generate_style(request_data),
+    )
+
+
+@app.post(
+    "/jobs/generate/brief/improve/",
+    response_model=JobCreateResponse,
+    dependencies=[Depends(verify_api_key)],
+)
+async def improve_brief_job_endpoint(
+    request_data: ImproveBriefRequest,
+    background_tasks: BackgroundTasks,
+):
+    return _enqueue_generation_job(
+        background_tasks,
+        "improve_brief",
+        lambda: improve_brief(request_data),
+    )
+
+
+@app.post(
+    "/jobs/generate/image/",
+    response_model=JobCreateResponse,
+    dependencies=[Depends(verify_api_key)],
+)
+async def generate_image_job_endpoint(
+    request_data: GenerateImageRequest,
+    background_tasks: BackgroundTasks,
+):
+    return _enqueue_generation_job(
+        background_tasks,
+        "generate_image",
+        lambda: generate_image_file(request_data),
+    )
+
+
+@app.post(
+    "/jobs/generate/audio/",
+    response_model=JobCreateResponse,
+    dependencies=[Depends(verify_api_key)],
+)
+async def generate_audio_job_endpoint(
+    request_data: GenerateAudioRequest,
+    background_tasks: BackgroundTasks,
+):
+    return _enqueue_generation_job(
+        background_tasks,
+        "generate_audio",
+        lambda: generate_audio_file(request_data),
+    )
 
 
 @app.post(

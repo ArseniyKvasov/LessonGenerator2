@@ -652,10 +652,10 @@ async def _generate_comprehension_tasks(text: str, short_type: str = "test") -> 
         return [await _generate_comprehension_task(text, short_type)]
 
     first, second = _split_text_halves(text)
-    return [
-        await _generate_comprehension_task(first, "test"),
-        await _generate_comprehension_task(second, "true_false"),
-    ]
+    return await asyncio.gather(
+        _generate_comprehension_task(first, "test"),
+        _generate_comprehension_task(second, "true_false"),
+    )
 
 
 async def _generate_reading_section(topic: str, brief: dict[str, Any], reading_title: str) -> dict[str, Any]:
@@ -1020,38 +1020,43 @@ async def generate_sections(request_data: GenerateSectionsRequest) -> dict[str, 
 
     try:
         vocabulary_groups = await _split_vocabulary(topic, request_data.brief.vocabulary)
-        for group in vocabulary_groups:
-            sections.append(await _generate_vocabulary_section(topic, group))
+        section_tasks = [
+            _generate_vocabulary_section(topic, group)
+            for group in vocabulary_groups
+        ]
 
-        for grammar_section in _split_grammar(request_data.brief.grammar):
-            sections.append(await _generate_grammar_section(topic, grammar_section, request_data.brief.grammar))
+        section_tasks.extend(
+            _generate_grammar_section(topic, grammar_section, request_data.brief.grammar)
+            for grammar_section in _split_grammar(request_data.brief.grammar)
+        )
 
         skill_titles = {
             skill.type: skill.title
             for skill in request_data.brief.practical_skills
         }
         if "reading" in skill_titles:
-            sections.append(await _generate_reading_section(topic, brief, skill_titles["reading"]))
+            section_tasks.append(_generate_reading_section(topic, brief, skill_titles["reading"]))
 
         if "listening" in skill_titles:
-            listening_section = await _generate_listening_section(topic, brief, skill_titles["listening"])
-            if listening_section:
-                sections.append(listening_section)
+            section_tasks.append(_generate_listening_section(topic, brief, skill_titles["listening"]))
 
         if "writing" in skill_titles:
-            sections.append(await _generate_writing_section(topic, brief, skill_titles["writing"]))
+            section_tasks.append(_generate_writing_section(topic, brief, skill_titles["writing"]))
 
         if "speaking" in skill_titles:
-            sections.append(await _generate_speaking_section(topic, brief, skill_titles["speaking"]))
+            section_tasks.append(_generate_speaking_section(topic, brief, skill_titles["speaking"]))
 
         if "pronunciation" in skill_titles:
-            pronunciation_section = await _generate_pronunciation_section(
-                request_data.brief.lesson_goal,
-                request_data.brief.vocabulary,
-                skill_titles["pronunciation"],
+            section_tasks.append(
+                _generate_pronunciation_section(
+                    request_data.brief.lesson_goal,
+                    request_data.brief.vocabulary,
+                    skill_titles["pronunciation"],
+                )
             )
-            if pronunciation_section:
-                sections.append(pronunciation_section)
+
+        generated_sections = await asyncio.gather(*section_tasks)
+        sections.extend(section for section in generated_sections if section)
     except ValueError as error:
         return {
             "status": "error",

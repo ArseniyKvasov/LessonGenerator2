@@ -17,6 +17,7 @@ TaskType = Literal[
     "audio",
     "speaking_cards",
 ]
+JobStatus = Literal["queued", "running", "done", "error"]
 
 
 def _clean_text(value: str) -> str:
@@ -62,6 +63,22 @@ def validate_topic(value: str) -> str:
 class ErrorResponse(BaseModel):
     status: Literal["error"] = "error"
     message: str
+
+
+class JobCreateResponse(BaseModel):
+    status: Literal["queued"] = "queued"
+    job_id: str
+    job_type: str
+
+
+class JobStatusResponse(BaseModel):
+    job_id: str
+    job_type: Optional[str] = None
+    status: JobStatus
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+    result: Optional[dict[str, Any]] = None
+    message: Optional[str] = None
 
 
 class HealthResponse(BaseModel):

@@ -65,6 +65,18 @@ X-API-Key: <your_api_key>
 3. `POST /generate/style/` — выбирает `color` и `icon` строго из переданных списков.
 4. `POST /generate/brief/improve/` — точечно улучшает brief по пользовательскому запросу.
 
+Для интеграций, которые не могут держать соединение во время долгой генерации, доступны job-endpoint'ы:
+
+- `POST /jobs/generate/brief/`
+- `POST /jobs/generate/sections/`
+- `POST /jobs/generate/style/`
+- `POST /jobs/generate/brief/improve/`
+- `POST /jobs/generate/image/`
+- `POST /jobs/generate/audio/`
+- `GET /jobs/{job_id}/`
+
+Job-endpoint принимает то же тело запроса, что и соответствующий `/generate/.../`, сразу возвращает `job_id`, а результат можно забрать polling-запросами через `GET /jobs/{job_id}/`.
+
 Дополнительно доступны:
 
 - `POST /generate/image/`

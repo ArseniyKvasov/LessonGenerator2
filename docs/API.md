@@ -26,6 +26,17 @@ user_request
 
 `/generate/brief/improve/` can be called whenever the user wants to adjust the brief.
 
+For integrations that cannot keep long HTTP connections open, use the job endpoints instead:
+
+```text
+POST /jobs/generate/brief/       → GET /jobs/{job_id}/
+POST /jobs/generate/sections/    → GET /jobs/{job_id}/
+POST /jobs/generate/style/       → GET /jobs/{job_id}/
+POST /jobs/generate/brief/improve/ → GET /jobs/{job_id}/
+POST /jobs/generate/image/       → GET /jobs/{job_id}/
+POST /jobs/generate/audio/       → GET /jobs/{job_id}/
+```
+
 ## GET `/health/`
 
 Response:
@@ -38,6 +49,105 @@ Response:
 ```
 
 `models_available` is `true` when at least one Groq model in the unified pool is currently usable.
+
+## Job endpoints
+
+Job endpoints accept the same request bodies as their synchronous `/generate/.../` counterparts, but return immediately with a `job_id`.
+
+Example:
+
+```http
+POST /jobs/generate/sections/
+```
+
+Request:
+
+```json
+{
+  "topic": "Travel English",
+  "brief": {
+    "lesson_goal": "Help the student ask and answer practical train-station questions in English.",
+    "vocabulary": ["ticket", "platform", "delay", "return ticket"],
+    "grammar": [],
+    "practical_skills": [
+      {"type": "speaking", "title": "Station Role Play"}
+    ]
+  }
+}
+```
+
+Immediate response:
+
+```json
+{
+  "status": "queued",
+  "job_id": "a0f5a2d1d7a04c58a8efc14f321d93a9",
+  "job_type": "generate_sections"
+}
+```
+
+Poll the job:
+
+```http
+GET /jobs/a0f5a2d1d7a04c58a8efc14f321d93a9/
+```
+
+Queued or running response:
+
+```json
+{
+  "job_id": "a0f5a2d1d7a04c58a8efc14f321d93a9",
+  "job_type": "generate_sections",
+  "status": "running",
+  "created_at": "2026-05-02T10:00:00+00:00",
+  "updated_at": "2026-05-02T10:00:01+00:00",
+  "result": null,
+  "message": null
+}
+```
+
+Successful response:
+
+```json
+{
+  "job_id": "a0f5a2d1d7a04c58a8efc14f321d93a9",
+  "job_type": "generate_sections",
+  "status": "done",
+  "created_at": "2026-05-02T10:00:00+00:00",
+  "updated_at": "2026-05-02T10:01:12+00:00",
+  "result": {
+    "status": "ok",
+    "sections": []
+  },
+  "message": null
+}
+```
+
+Failed response:
+
+```json
+{
+  "job_id": "a0f5a2d1d7a04c58a8efc14f321d93a9",
+  "job_type": "generate_sections",
+  "status": "error",
+  "created_at": "2026-05-02T10:00:00+00:00",
+  "updated_at": "2026-05-02T10:01:12+00:00",
+  "result": {
+    "status": "error",
+    "message": "No Groq models are currently available"
+  },
+  "message": "No Groq models are currently available"
+}
+```
+
+Polling recommendation for external services:
+
+- create a job with `POST /jobs/generate/.../`
+- store `job_id` on the client side
+- poll `GET /jobs/{job_id}/` every 2-5 seconds
+- stop polling when `status` is `done` or `error`
+- read the generated payload from `result` when `status` is `done`
+- treat HTTP `404` as an unknown or expired job
 
 ## POST `/generate/brief/`
 
