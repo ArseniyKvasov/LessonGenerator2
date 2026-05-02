@@ -24,7 +24,10 @@ def test_generate_sections_runs_independent_sections_concurrently(monkeypatch) -
 
     async def split_grammar(topic: str, grammar: list[str]) -> list[dict]:
         return [
-            {"title": getattr(item, "topic", item), "points": getattr(item, "points", [item])}
+            {
+                "title": item["topic"] if isinstance(item, dict) else getattr(item, "topic", item),
+                "points": item["points"] if isinstance(item, dict) else getattr(item, "points", [item]),
+            }
             for item in grammar
         ]
 
@@ -77,6 +80,42 @@ def test_generate_sections_runs_independent_sections_concurrently(monkeypatch) -
         "Writing Practice",
         "Speaking Practice",
     ]
+
+
+def test_generate_sections_passes_serializable_grammar(monkeypatch) -> None:
+    seen_split_grammar = None
+    seen_full_grammar = None
+
+    async def split_vocabulary(topic: str, vocabulary: list[str]) -> list[dict]:
+        return []
+
+    async def split_grammar(topic: str, grammar: list[dict]) -> list[dict]:
+        nonlocal seen_split_grammar
+        seen_split_grammar = grammar
+        return [{"title": grammar[0]["topic"], "points": grammar[0]["points"]}]
+
+    async def generate_grammar_section(topic: str, grammar_section: dict, full_grammar: list[dict]) -> dict:
+        nonlocal seen_full_grammar
+        seen_full_grammar = full_grammar
+        return {"title": grammar_section["title"], "tasks": [{"type": "note", "content": "Grammar note"}]}
+
+    monkeypatch.setattr(sections_generator, "_split_vocabulary", split_vocabulary)
+    monkeypatch.setattr(sections_generator, "_split_grammar", split_grammar)
+    monkeypatch.setattr(sections_generator, "_generate_grammar_section", generate_grammar_section)
+
+    request = GenerateSectionsRequest(
+        topic="Grammar Practice",
+        brief=LessonBrief(
+            lesson_goal="Practice present continuous in simple sentences.",
+            grammar=[{"topic": "Present Continuous", "points": ["form", "questions"]}],
+        ),
+    )
+
+    response = asyncio.run(sections_generator.generate_sections(request))
+
+    assert response["status"] == "ok"
+    assert seen_split_grammar == [{"topic": "Present Continuous", "points": ["form", "questions"]}]
+    assert seen_full_grammar == [{"topic": "Present Continuous", "points": ["form", "questions"]}]
 
 
 def test_split_grammar_uses_ai_section_plan(monkeypatch) -> None:

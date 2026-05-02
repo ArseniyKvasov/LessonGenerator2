@@ -1007,6 +1007,7 @@ def _section_or_none(section: Optional[dict[str, Any]]) -> Optional[dict[str, An
 async def generate_sections(request_data: GenerateSectionsRequest) -> dict[str, Any]:
     topic = request_data.topic
     brief = request_data.brief.model_dump()
+    grammar = brief.get("grammar", [])
     sections: list[dict[str, Any]] = []
 
     try:
@@ -1016,9 +1017,9 @@ async def generate_sections(request_data: GenerateSectionsRequest) -> dict[str, 
             for group in vocabulary_groups
         ]
 
-        grammar_sections = await _split_grammar(topic, request_data.brief.grammar)
+        grammar_sections = await _split_grammar(topic, grammar)
         section_tasks.extend(
-            _generate_grammar_section(topic, grammar_section, request_data.brief.grammar)
+            _generate_grammar_section(topic, grammar_section, grammar)
             for grammar_section in grammar_sections
         )
 
