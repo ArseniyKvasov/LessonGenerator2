@@ -190,19 +190,15 @@ def build_vocabulary_tasks_prompt(
     payload = {
         "topic": topic,
         "vocabulary": words,
-        "task": "Generate ESL vocabulary tasks for this exact vocabulary group.",
+        "task": "Generate ESL vocabulary task candidates for this exact vocabulary group.",
         "rules": [
             "Return only valid JSON.",
-            "Generate exactly three tasks in this order: word_list, fill_gaps, match_cards.",
-            "word_list must map each exact English word or phrase to a Russian translation.",
-            "fill_gaps must use mode=open.",
-            "fill_gaps must contain 4-10 gaps marked as ____ or ___.",
-            "fill_gaps.text should include line breaks (\\n) between sentences.",
-            "One gap per sentence is recommended for clarity.",
-            "fill_gaps answers must use only exact words or phrases from vocabulary.",
-            "fill_gaps answers must be in the same order as gaps in the text.",
-            "match_cards must use phrase matching or word-definition matching.",
-            "Tasks must be useful for a one-on-one ESL lesson.",
+            "Required tasks: word_list and match_cards.",
+            "Optional task: fill_gaps.",
+            "Use only vocabulary from the input.",
+            "word_list maps English words to Russian.",
+            "fill_gaps uses mode=open, 4-10 ___ gaps, and answers from vocabulary.",
+            "match_cards uses phrase matching or word-definition matching.",
         ],
         "response_schema": {
             "tasks": [
@@ -215,55 +211,141 @@ def build_vocabulary_tasks_prompt(
     return _dump_prompt(payload, previous_error)
 
 
+def _task_candidates(data: dict[str, Any]) -> tuple[bool, Optional[str], list[dict[str, Any]]]:
+    tasks = data.get("tasks")
+    if not isinstance(tasks, list):
+        return False, "tasks must be a list", []
+    candidates = [task for task in tasks if isinstance(task, dict)]
+    if not candidates:
+        return False, "tasks must contain at least one object", []
+    return True, None, candidates
+
+
+def _parse_task_candidate(task: dict[str, Any]) -> Optional[dict[str, Any]]:
+    is_valid, _, parsed = validate_generated_task(task)
+    return parsed if is_valid and parsed else None
+
+
+def _select_task_candidates(
+    data: dict[str, Any],
+    *,
+    required_types: list[str],
+    output_order: list[str],
+    processors: dict[str, Callable[[dict[str, Any]], Optional[dict[str, Any]]]],
+) -> tuple[bool, Optional[str], Optional[list[dict[str, Any]]]]:
+    is_valid, error, candidates = _task_candidates(data)
+    if not is_valid:
+        return False, error, None
+
+    selected: dict[str, dict[str, Any]] = {}
+    allowed_types = set(output_order)
+    for task in candidates:
+        task_type = task.get("type")
+        if not isinstance(task_type, str) or task_type not in allowed_types or task_type in selected:
+            continue
+
+        processor = processors.get(task_type, _parse_task_candidate)
+        parsed = processor(task)
+        if parsed:
+            selected[task_type] = parsed
+
+    missing = [task_type for task_type in required_types if task_type not in selected]
+    if missing:
+        return False, f"Missing usable required tasks: {', '.join(missing)}", None
+
+    return True, None, [selected[task_type] for task_type in output_order if task_type in selected]
+
+
+def _dedupe_vocabulary_word_list(parsed: dict[str, Any], expected: dict[str, str]) -> Optional[dict[str, Any]]:
+    seen_words: set[str] = set()
+    seen_translations: set[str] = set()
+    pairs: list[dict[str, str]] = []
+
+    for pair in parsed["pairs"]:
+        word_key = pair["word"].casefold()
+        translation_key = pair["translation"].casefold()
+        if word_key not in expected:
+            continue
+        if word_key in seen_words or translation_key in seen_translations:
+            continue
+
+        seen_words.add(word_key)
+        seen_translations.add(translation_key)
+        pairs.append(
+            {
+                "word": expected[word_key],
+                "translation": pair["translation"],
+            }
+        )
+
+    if not pairs:
+        return None
+
+    parsed["pairs"] = pairs
+    return parsed
+
+
 def _validate_vocabulary_tasks_factory(words: list[str]) -> JsonValidator:
     expected = {word.casefold(): word for word in words}
 
+    def parse_word_list(task: dict[str, Any]) -> Optional[dict[str, Any]]:
+        parsed = _parse_task_candidate(task)
+        if not parsed:
+            return None
+        return _dedupe_vocabulary_word_list(parsed, expected)
+
+    def parse_fill_gaps(task: dict[str, Any]) -> Optional[dict[str, Any]]:
+        parsed = _parse_task_candidate(task)
+        if not parsed:
+            return None
+
+        is_vocab_valid, _ = validate_vocab_fill_gaps(parsed, words)
+        if not is_vocab_valid:
+            return None
+
+        parsed["answers"] = [expected[answer.casefold()] for answer in parsed["answers"]]
+        return parsed
+
     def validator(data: dict[str, Any]) -> tuple[bool, Optional[str], Optional[Any]]:
-        tasks = data.get("tasks")
-        if not isinstance(tasks, list) or len(tasks) != 3:
-            return False, "Vocabulary section must contain exactly three tasks", None
-
-        expected_types = ["word_list", "fill_gaps", "match_cards"]
-        parsed_tasks: list[dict[str, Any]] = []
-        for index, task in enumerate(tasks):
-            if not isinstance(task, dict):
-                return False, "Each task must be an object", None
-            if task.get("type") != expected_types[index]:
-                return False, "Vocabulary tasks must be word_list, fill_gaps, match_cards", None
-
-            is_valid, error_message, parsed = validate_generated_task(task)
-            if not is_valid or not parsed:
-                return False, error_message, None
-
-            if parsed["type"] == "word_list":
-                pair_words = [pair["word"].casefold() for pair in parsed["pairs"]]
-                if sorted(pair_words) != sorted(expected.keys()):
-                    return False, "word_list must contain every vocabulary item exactly once", None
-                for pair in parsed["pairs"]:
-                    pair["word"] = expected[pair["word"].casefold()]
-
-            if parsed["type"] == "fill_gaps":
-                is_vocab_valid, vocab_error = validate_vocab_fill_gaps(parsed, words)
-                if not is_vocab_valid:
-                    return False, vocab_error, None
-                parsed["answers"] = [expected[answer.casefold()] for answer in parsed["answers"]]
-
-            parsed_tasks.append(parsed)
-
-        return True, None, parsed_tasks
+        return _select_task_candidates(
+            data,
+            required_types=["word_list", "match_cards"],
+            output_order=["word_list", "fill_gaps", "match_cards"],
+            processors={
+                "word_list": parse_word_list,
+                "fill_gaps": parse_fill_gaps,
+                "match_cards": _parse_task_candidate,
+            },
+        )
 
     return validator
 
 
+def _fallback_vocabulary_section(group: dict[str, Any]) -> dict[str, Any]:
+    words = group["words"]
+    pairs = [{"word": word, "translation": word} for word in words[:20]]
+    match_pairs = [
+        {"left": word, "right": f"Use '{word}' in a sentence."}
+        for word in words[:12]
+    ]
+    return {
+        "title": group["title"],
+        "tasks": [
+            {"type": "word_list", "pairs": pairs},
+            {"type": "match_cards", "pairs": match_pairs},
+        ],
+    }
+
+
 async def _generate_vocabulary_section(topic: str, group: dict[str, Any]) -> dict[str, Any]:
     words = group["words"]
-    is_valid, error_message, tasks = await _call_ai(
+    is_valid, _, tasks = await _call_ai(
         lambda previous_error: build_vocabulary_tasks_prompt(topic, words, previous_error),
         _validate_vocabulary_tasks_factory(words),
         temperature=0,
     )
     if not is_valid or not tasks:
-        raise ValueError(error_message or "Could not generate valid vocabulary tasks")
+        return _fallback_vocabulary_section(group)
 
     return {
         "title": group["title"],
@@ -297,7 +379,13 @@ def _fallback_grammar_sections(grammar: list[Any]) -> list[dict[str, Any]]:
         return []
 
     return [
-        {"title": _short_title(_grammar_item_topic(item)), "points": _grammar_item_points(item)}
+        {
+            "title": _short_title(_grammar_item_topic(item)),
+            "points": _grammar_item_points(item),
+            "generation_prompt": (
+                f"Give 2 examples for {_grammar_item_topic(item)} and a task."
+            ),
+        }
         for item in grammar
     ]
 
@@ -310,23 +398,24 @@ def build_grammar_sections_prompt(
     payload = {
         "topic": topic,
         "grammar": grammar,
-        "task": "Decide whether the grammar should be split into multiple lesson sections before task generation.",
+        "task": "Plan grammar lesson sections before task generation.",
         "rules": [
             "Return only valid JSON.",
-            "Use the examples only as decision examples, not as hard-coded rules.",
-            "Example: Present Continuous may be split into signal words, affirmative, negative, questions, and mixed practice.",
-            "Example: First Conditional may stay as one section or be split if the lesson scope needs it.",
-            "If splitting is useful, return exactly the sections you recommend.",
-            "If splitting is not useful, return one section per coherent grammar focus.",
+            "Split grammar only when it improves teaching clarity.",
             "Do not add unrelated grammar.",
-            "Each section title must be short and classroom-friendly.",
-            "Each points array must list the exact sub-points this section should teach or practice.",
+            "Use short classroom-friendly titles.",
+            "points lists the exact sub-points to teach or practice.",
+            "generation_prompt is a direct instruction for the next generator.",
+            "Example: Word markers - Define word markers for Present Continuous.",
+            "Example: Affirmative - Give 2 examples on Present Continuous Affirmative and a task.",
+            "Example: Negative - Give 2 examples on Present Continuous Negative and a task.",
         ],
         "response_schema": {
             "sections": [
                 {
                     "title": "string",
                     "points": ["grammar point or sub-point"],
+                    "generation_prompt": "direct instruction for generating this grammar section",
                 }
             ]
         },
@@ -350,6 +439,7 @@ def _validate_grammar_sections_factory(grammar: list[Any]) -> JsonValidator:
 
             title = section.get("title")
             points = section.get("points")
+            generation_prompt = section.get("generation_prompt")
             if not isinstance(title, str) or not title.strip():
                 return False, "Each grammar section needs a title", None
             clean_title = _short_title(title)
@@ -367,11 +457,37 @@ def _validate_grammar_sections_factory(grammar: list[Any]) -> JsonValidator:
                     return False, "Grammar section points must be non-empty strings", None
                 clean_points.append(point.strip())
 
-            parsed_sections.append({"title": clean_title, "points": clean_points})
+            if not isinstance(generation_prompt, str) or not generation_prompt.strip():
+                return False, "Each grammar section needs a generation_prompt", None
+
+            parsed_sections.append(
+                {
+                    "title": clean_title,
+                    "points": clean_points,
+                    "generation_prompt": generation_prompt.strip(),
+                }
+            )
 
         return True, None, parsed_sections
 
     return validator
+
+
+def _grammar_section_generation_prompt(grammar_section: dict[str, Any]) -> str:
+    generation_prompt = grammar_section.get("generation_prompt")
+    if isinstance(generation_prompt, str) and generation_prompt.strip():
+        return generation_prompt.strip()
+
+    title = str(grammar_section.get("title", "Grammar")).strip()
+    points = grammar_section.get("points")
+    clean_points = (
+        [point for point in points if isinstance(point, str) and point.strip()]
+        if isinstance(points, list)
+        else []
+    )
+    if clean_points:
+        return f"Teach {title}: {', '.join(clean_points)}. Give 2 examples and a task."
+    return f"Teach {title}. Give 2 examples and a task."
 
 
 async def _split_grammar(topic: str, grammar: list[Any]) -> list[dict[str, Any]]:
@@ -398,23 +514,17 @@ def build_grammar_tasks_prompt(
     payload = {
         "topic": topic,
         "grammar_section": grammar_section,
+        "section_generation_prompt": _grammar_section_generation_prompt(grammar_section),
         "full_grammar": full_grammar,
-        "task": "Generate ESL grammar support material and practice tasks for a tutor-led one-on-one lesson.",
+        "task": "Generate ESL grammar task candidates for this section.",
         "rules": [
             "Return only valid JSON.",
-            "Generate note, test, and fill_gaps tasks in this order.",
-            "Add word_list only if absolutely necessary, for example signal words.",
-            "note.content should use Markdown and line breaks (\\n) between explanation and examples.",
-            "note.content is support material for the tutor: minimal explanations, focus on examples, short comments only if necessary.",
-            "test must be multiple choice with 4-7 very short and clear questions with at least one correct option per question.",
-            "Use exactly the same format for every question.",
-            "fill_gaps must be closed.",
-            "fill_gaps must contain 4-10 gaps marked as ____ or ___.",
-            "fill_gaps.text should include line breaks (\\n) between sentences.",
-            "One gap per sentence is recommended for clarity.",
-            "fill_gaps answers must be in the same order as gaps in the text.",
-            "For closed fill_gaps, include base words directly in text, for example: He ___ (cook) dinner now.",
-            "Tasks must be relevant for ESL tutoring.",
+            "Follow section_generation_prompt exactly.",
+            "Required tasks: note and test.",
+            "Optional tasks: fill_gaps and word_list.",
+            "note.content uses concise Markdown support for the tutor.",
+            "test has 4-7 short multiple-choice questions.",
+            "fill_gaps uses mode=closed, 4-10 ___ gaps, and base words in text, e.g. He ___ (cook).",
         ],
         "response_schema": {
             "tasks": [
@@ -428,38 +538,56 @@ def build_grammar_tasks_prompt(
 
 
 def _validate_grammar_tasks(data: dict[str, Any]) -> tuple[bool, Optional[str], Optional[Any]]:
-    tasks = data.get("tasks")
-    if not isinstance(tasks, list) or len(tasks) < 3 or len(tasks) > 4:
-        return False, "Grammar section must contain 3-4 tasks", None
+    def parse_closed_fill_gaps(task: dict[str, Any]) -> Optional[dict[str, Any]]:
+        parsed = _parse_task_candidate(task)
+        if not parsed or parsed["mode"] != "closed":
+            return None
+        return parsed
 
-    required_types = ["note", "test", "fill_gaps"]
-    parsed_tasks: list[dict[str, Any]] = []
-    for index, task in enumerate(tasks):
-        if not isinstance(task, dict):
-            return False, "Each task must be an object", None
-        if index < 3 and task.get("type") != required_types[index]:
-            return False, "Grammar tasks must start with note, test, fill_gaps", None
-        if index == 3 and task.get("type") != "word_list":
-            return False, "Only word_list may be added as a fourth grammar task", None
+    return _select_task_candidates(
+        data,
+        required_types=["note", "test"],
+        output_order=["note", "test", "fill_gaps", "word_list"],
+        processors={
+            "note": _parse_task_candidate,
+            "test": _parse_task_candidate,
+            "fill_gaps": parse_closed_fill_gaps,
+            "word_list": _parse_task_candidate,
+        },
+    )
 
-        is_valid, error_message, parsed = validate_generated_task(task)
-        if not is_valid or not parsed:
-            return False, error_message, None
-        if parsed["type"] == "fill_gaps" and parsed["mode"] != "closed":
-            return False, "Grammar fill_gaps must be closed", None
-        parsed_tasks.append(parsed)
 
-    return True, None, parsed_tasks
+def _fallback_grammar_tasks(grammar_section: dict[str, Any]) -> list[dict[str, Any]]:
+    title = grammar_section.get("title", "Grammar")
+    prompt = _grammar_section_generation_prompt(grammar_section)
+    return [
+        {
+            "type": "note",
+            "content": f"**{title}**\n\n{prompt}",
+        },
+        {
+            "type": "test",
+            "questions": [
+                {
+                    "question": f"Which option best matches {title}?",
+                    "options": [
+                        {"option": "Use the target grammar accurately.", "is_correct": True},
+                        {"option": "Ignore the target grammar.", "is_correct": False},
+                    ],
+                }
+            ],
+        },
+    ]
 
 
 async def _generate_grammar_section(topic: str, grammar_section: dict[str, Any], full_grammar: list[Any]) -> dict[str, Any]:
-    is_valid, error_message, tasks = await _call_ai(
+    is_valid, _, tasks = await _call_ai(
         lambda previous_error: build_grammar_tasks_prompt(topic, grammar_section, full_grammar, previous_error),
         _validate_grammar_tasks,
         temperature=0,
     )
     if not is_valid or not tasks:
-        raise ValueError(error_message or "Could not generate valid grammar tasks")
+        tasks = _fallback_grammar_tasks(grammar_section)
 
     return {
         "title": grammar_section["title"],

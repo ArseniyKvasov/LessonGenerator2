@@ -55,13 +55,20 @@ def test_vocabulary_fill_gaps_rejects_words_outside_list() -> None:
     assert "outside the list" in error
 
 
-def test_test_task_requires_single_correct_option() -> None:
-    is_valid, error, _ = validate_generated_task(
+def test_test_task_removes_questions_without_correct_option_and_keeps_multi_correct() -> None:
+    is_valid, error, parsed = validate_generated_task(
         {
             "type": "test",
             "questions": [
                 {
-                    "question": "Choose one.",
+                    "question": "No correct answer.",
+                    "options": [
+                        {"option": "A", "is_correct": False},
+                        {"option": "B", "is_correct": False},
+                    ],
+                },
+                {
+                    "question": "Two correct answers.",
                     "options": [
                         {"option": "A", "is_correct": True},
                         {"option": "B", "is_correct": True},
@@ -85,8 +92,13 @@ def test_test_task_requires_single_correct_option() -> None:
         }
     )
 
-    assert not is_valid
-    assert error == "Each test question must have exactly one correct option"
+    assert is_valid, error
+    assert parsed is not None
+    assert [question["question"] for question in parsed["questions"]] == [
+        "Two correct answers.",
+        "Choose two.",
+        "Choose three.",
+    ]
 
 
 def test_fill_gaps_text_is_materialized_in_answer_order() -> None:

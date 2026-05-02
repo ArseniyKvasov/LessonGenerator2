@@ -4,7 +4,7 @@ from typing import Any, Optional
 
 from pydantic import TypeAdapter, ValidationError
 
-from app.schemas import GeneratedTask, LessonSection, TestTask
+from app.schemas import GeneratedTask, LessonSection
 
 
 GeneratedTaskAdapter = TypeAdapter(GeneratedTask)
@@ -51,10 +51,17 @@ def shuffle_test_options(task: dict[str, Any]) -> dict[str, Any]:
 
 
 def validate_test_task(task: dict[str, Any]) -> tuple[bool, Optional[str]]:
+    valid_questions = []
     for question in task["questions"]:
         correct_count = sum(1 for option in question["options"] if option["is_correct"])
-        if correct_count != 1:
-            return False, "Each test question must have exactly one correct option"
+        if correct_count == 0:
+            continue
+        valid_questions.append(question)
+
+    if not valid_questions:
+        return False, "test must contain at least one question with a correct option"
+
+    task["questions"] = valid_questions
     return True, None
 
 

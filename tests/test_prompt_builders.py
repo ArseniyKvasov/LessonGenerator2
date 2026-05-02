@@ -72,34 +72,41 @@ def test_reading_prompt_uses_brief_stage_title() -> None:
 def test_vocabulary_tasks_prompt_uses_fixed_list_and_open_gaps() -> None:
     prompt = build_vocabulary_tasks_prompt("Travel English", ["ticket", "platform", "delay", "gate"])
 
-    assert "fill_gaps must use mode=open" in prompt
-    assert "line breaks" in prompt
-    assert "use only exact words" in prompt
+    assert "Required tasks: word_list and match_cards" in prompt
+    assert "Optional task: fill_gaps" in prompt
+    assert "fill_gaps uses mode=open" in prompt
+    assert "Use only vocabulary from the input" in prompt
     assert "ticket" in prompt
 
 
 def test_grammar_prompt_requires_closed_gaps_with_base_words_in_text() -> None:
     prompt = build_grammar_tasks_prompt(
         "Present Continuous",
-        {"title": "Affirmative", "points": ["am/is/are + verb-ing"]},
+        {
+            "title": "Affirmative",
+            "points": ["am/is/are + verb-ing"],
+            "generation_prompt": "Give 2 examples on Present Continuous Affirmative and a task.",
+        },
         ["Present Continuous"],
     )
 
-    assert "fill_gaps must be closed" in prompt
-    assert "base words directly in text" in prompt
-    assert "fill_gaps.text should include line breaks" in prompt
-    assert "One gap per sentence is recommended" in prompt
-    assert "minimal explanations" in prompt
+    assert "section_generation_prompt" in prompt
+    assert "Follow section_generation_prompt exactly" in prompt
+    assert "Give 2 examples on Present Continuous Affirmative and a task" in prompt
+    assert "Required tasks: note and test" in prompt
+    assert "Optional tasks: fill_gaps and word_list" in prompt
+    assert "fill_gaps uses mode=closed" in prompt
+    assert "base words in text" in prompt
 
 
 def test_grammar_sections_prompt_asks_ai_to_decide_split_with_examples() -> None:
     prompt = build_grammar_sections_prompt("Present Continuous", ["Present Continuous"])
 
-    assert "Decide whether the grammar should be split" in prompt
-    assert "Use the examples only as decision examples" in prompt
-    assert "Present Continuous may be split" in prompt
-    assert "First Conditional may stay as one section" in prompt
-    assert "return exactly the sections you recommend" in prompt
+    assert "Plan grammar lesson sections" in prompt
+    assert "Split grammar only when it improves teaching clarity" in prompt
+    assert "Do not add unrelated grammar" in prompt
+    assert "generation_prompt" in prompt
+    assert "Give 2 examples on Present Continuous Affirmative and a task" in prompt
 
 
 def test_comprehension_prompt_uses_exact_text() -> None:

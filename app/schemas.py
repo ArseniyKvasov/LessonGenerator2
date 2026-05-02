@@ -365,7 +365,7 @@ class TestQuestion(BaseModel):
 
 class TestTask(BaseModel):
     type: Literal["test"]
-    questions: list[TestQuestion] = Field(min_length=3, max_length=7)
+    questions: list[TestQuestion] = Field(min_length=1, max_length=7)
 
 
 class TrueFalseStatement(BaseModel):
