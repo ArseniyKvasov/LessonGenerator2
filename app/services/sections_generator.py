@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import math
 import re
 from typing import Any, Callable, Optional
@@ -21,6 +22,7 @@ from app.services.validators import validate_generated_task, validate_vocab_fill
 
 
 JsonValidator = Callable[[dict[str, Any]], tuple[bool, Optional[str], Optional[Any]]]
+logger = logging.getLogger(__name__)
 
 
 def _dump_prompt(payload: dict[str, Any], previous_error: Optional[str]) -> str:
@@ -321,31 +323,15 @@ def _validate_vocabulary_tasks_factory(words: list[str]) -> JsonValidator:
     return validator
 
 
-def _fallback_vocabulary_section(group: dict[str, Any]) -> dict[str, Any]:
-    words = group["words"]
-    pairs = [{"word": word, "translation": word} for word in words[:20]]
-    match_pairs = [
-        {"left": word, "right": f"Use '{word}' in a sentence."}
-        for word in words[:12]
-    ]
-    return {
-        "title": group["title"],
-        "tasks": [
-            {"type": "word_list", "pairs": pairs},
-            {"type": "match_cards", "pairs": match_pairs},
-        ],
-    }
-
-
 async def _generate_vocabulary_section(topic: str, group: dict[str, Any]) -> dict[str, Any]:
     words = group["words"]
-    is_valid, _, tasks = await _call_ai(
+    is_valid, error_message, tasks = await _call_ai(
         lambda previous_error: build_vocabulary_tasks_prompt(topic, words, previous_error),
         _validate_vocabulary_tasks_factory(words),
         temperature=0,
     )
     if not is_valid or not tasks:
-        return _fallback_vocabulary_section(group)
+        raise ValueError(f"Vocabulary section '{group['title']}' failed: {error_message or 'missing valid tasks'}")
 
     return {
         "title": group["title"],
@@ -557,37 +543,14 @@ def _validate_grammar_tasks(data: dict[str, Any]) -> tuple[bool, Optional[str], 
     )
 
 
-def _fallback_grammar_tasks(grammar_section: dict[str, Any]) -> list[dict[str, Any]]:
-    title = grammar_section.get("title", "Grammar")
-    prompt = _grammar_section_generation_prompt(grammar_section)
-    return [
-        {
-            "type": "note",
-            "content": f"**{title}**\n\n{prompt}",
-        },
-        {
-            "type": "test",
-            "questions": [
-                {
-                    "question": f"Which option best matches {title}?",
-                    "options": [
-                        {"option": "Use the target grammar accurately.", "is_correct": True},
-                        {"option": "Ignore the target grammar.", "is_correct": False},
-                    ],
-                }
-            ],
-        },
-    ]
-
-
 async def _generate_grammar_section(topic: str, grammar_section: dict[str, Any], full_grammar: list[Any]) -> dict[str, Any]:
-    is_valid, _, tasks = await _call_ai(
+    is_valid, error_message, tasks = await _call_ai(
         lambda previous_error: build_grammar_tasks_prompt(topic, grammar_section, full_grammar, previous_error),
         _validate_grammar_tasks,
         temperature=0,
     )
     if not is_valid or not tasks:
-        tasks = _fallback_grammar_tasks(grammar_section)
+        raise ValueError(f"Grammar section '{grammar_section['title']}' failed: {error_message or 'missing valid tasks'}")
 
     return {
         "title": grammar_section["title"],
@@ -631,20 +594,6 @@ def _validate_text_content(data: dict[str, Any]) -> tuple[bool, Optional[str], O
     if not isinstance(content, str) or not content.strip():
         return False, "content must be a non-empty string", None
     return True, None, _ensure_markdown_note(content)
-
-
-def _fallback_reading_text(topic: str, brief: dict[str, Any], reading_title: str) -> str:
-    vocabulary = brief.get("vocabulary") or []
-    grammar = brief.get("grammar") or []
-    words = ", ".join(vocabulary[:4]) if vocabulary else "simple English phrases"
-    grammar_focus = _grammar_item_topic(grammar[0]) if grammar else "clear sentences"
-    return (
-        f"**{reading_title}**\n\n"
-        f"Mira has a short English lesson today. She practices {words}. "
-        f"Her tutor asks simple questions and helps her use {grammar_focus}. "
-        "Mira answers slowly, checks her mistakes, and tries again. "
-        "At the end, she can say her ideas more clearly."
-    )
 
 
 def build_comprehension_task_prompt(
@@ -760,12 +709,15 @@ async def _generate_comprehension_tasks(text: str, short_type: str = "test") -> 
 
 
 async def _generate_reading_section(topic: str, brief: dict[str, Any], reading_title: str) -> dict[str, Any]:
-    is_valid, _, content = await _call_ai(
+    is_valid, error_message, content = await _call_ai(
         lambda previous_error: build_reading_text_prompt(topic, brief, reading_title, previous_error),
         _validate_text_content,
         temperature=0.9,
     )
-    reading_text = content if is_valid and content else _fallback_reading_text(topic, brief, reading_title)
+    if not is_valid or not content:
+        raise ValueError(f"Reading section '{reading_title}' failed: {error_message or 'missing reading text'}")
+
+    reading_text = content
     tasks = [{"type": "note", "content": reading_text}]
     tasks.extend(await _generate_comprehension_tasks(reading_text, short_type="test"))
     return {"title": reading_title, "tasks": tasks}
@@ -831,14 +783,14 @@ def _script_to_markdown(audio_type: str, script: list[dict[str, str]]) -> str:
     return "\n".join(lines)
 
 
-async def _generate_listening_section(topic: str, brief: dict[str, Any], listening_title: str) -> Optional[dict[str, Any]]:
-    is_valid, _, payload = await _call_ai(
+async def _generate_listening_section(topic: str, brief: dict[str, Any], listening_title: str) -> dict[str, Any]:
+    is_valid, error_message, payload = await _call_ai(
         lambda previous_error: build_listening_script_prompt(topic, brief, listening_title, previous_error),
         _validate_listening_script,
         temperature=0.9,
     )
     if not is_valid or not payload:
-        return None
+        raise ValueError(f"Listening section '{listening_title}' failed: {error_message or 'missing listening script'}")
 
     audio_request = GenerateAudioRequest(
         audio_type=payload["audio_type"],
@@ -852,23 +804,23 @@ async def _generate_listening_section(topic: str, brief: dict[str, Any], listeni
             timeout=get_settings().AUDIO_GENERATION_TIMEOUT_SECONDS,
         )
     except Exception:
-        return None
-
-    if audio_response.get("status") != "ok" or not audio_response.get("audio_base64"):
-        return None
+        audio_response = {"status": "error"}
 
     script_note = _script_to_markdown(payload["audio_type"], payload["script"])
     audio_text = build_audio_text(audio_request)
     tasks = [
         {"type": "note", "content": script_note},
-        {
-            "type": "audio",
-            "audio_type": payload["audio_type"],
-            "script": payload["script"],
-            "response_format": audio_response["response_format"],
-            "audio_base64": audio_response["audio_base64"],
-        },
     ]
+    if audio_response.get("status") == "ok" and audio_response.get("audio_base64"):
+        tasks.append(
+            {
+                "type": "audio",
+                "audio_type": payload["audio_type"],
+                "script": payload["script"],
+                "response_format": audio_response["response_format"],
+                "audio_base64": audio_response["audio_base64"],
+            }
+        )
     tasks.extend(await _generate_comprehension_tasks(audio_text, short_type="true_false"))
     return {"title": listening_title, "tasks": tasks}
 
@@ -925,15 +877,13 @@ def _validate_writing_payload(data: dict[str, Any]) -> tuple[bool, Optional[str]
 
 
 async def _generate_writing_section(topic: str, brief: dict[str, Any], writing_title: str) -> dict[str, Any]:
-    is_valid, _, payload = await _call_ai(
+    is_valid, error_message, payload = await _call_ai(
         lambda previous_error: build_writing_prompt(topic, brief, writing_title, previous_error),
         _validate_writing_payload,
         temperature=0,
     )
     if not is_valid or not payload:
-        payload = {
-            "instruction": f"Write a short answer about **{writing_title}** and include the target vocabulary or grammar from the lesson.\n",
-        }
+        raise ValueError(f"Writing section '{writing_title}' failed: {error_message or 'missing writing instruction'}")
 
     return {
         "title": writing_title,
@@ -1002,21 +952,13 @@ def _speaking_cards_content(questions: list[str], has_image: bool) -> str:
 
 
 async def _generate_speaking_section(topic: str, brief: dict[str, Any], speaking_title: str) -> dict[str, Any]:
-    is_valid, _, payload = await _call_ai(
+    is_valid, error_message, payload = await _call_ai(
         lambda previous_error: build_speaking_prompt(topic, brief, speaking_title, previous_error),
         _validate_speaking_payload,
         temperature=0,
     )
     if not is_valid or not payload:
-        payload = {
-            "use_image": False,
-            "image_description": None,
-            "questions": [
-                f"What can you say about {speaking_title}?",
-                "Which words or grammar from the lesson can you use in your answer?",
-                "Can you ask your tutor one question using today's language?",
-            ],
-        }
+        raise ValueError(f"Speaking section '{speaking_title}' failed: {error_message or 'missing speaking questions'}")
 
     tasks: list[dict[str, Any]] = []
     has_image = False
@@ -1025,7 +967,13 @@ async def _generate_speaking_section(topic: str, brief: dict[str, Any], speaking
             detailed_description=payload["image_description"],
             response_format="b64_json",
         )
-        image_response = await generate_image_file(image_request)
+        try:
+            image_response = await asyncio.wait_for(
+                generate_image_file(image_request),
+                timeout=get_settings().IMAGE_GENERATION_TIMEOUT_SECONDS,
+            )
+        except Exception:
+            image_response = {"status": "error"}
         if image_response.get("status") == "ok" and image_response.get("image"):
             has_image = True
             tasks.append(
@@ -1109,26 +1057,28 @@ def _pronunciation_note(sounds: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-async def _generate_pronunciation_section(lesson_goal: str, vocabulary: list[str], target_sounds: str) -> Optional[dict[str, Any]]:
+async def _generate_pronunciation_section(lesson_goal: str, vocabulary: list[str], target_sounds: str) -> dict[str, Any]:
     if not vocabulary:
-        return None
-    is_valid, _, sounds = await _call_ai(
+        raise ValueError(f"Pronunciation section '{target_sounds}' failed: vocabulary is required")
+    is_valid, error_message, sounds = await _call_ai(
         lambda previous_error: build_pronunciation_prompt(lesson_goal, vocabulary, target_sounds, previous_error),
         _validate_pronunciation_payload_factory(vocabulary),
         temperature=0,
     )
     if not is_valid or not sounds:
-        return None
+        raise ValueError(f"Pronunciation section '{target_sounds}' failed: {error_message or 'missing pronunciation sounds'}")
     return {"title": target_sounds, "tasks": [{"type": "note", "content": _pronunciation_note(sounds)}]}
 
 
-def _section_or_none(section: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
+def _validate_section_or_raise(section: Optional[dict[str, Any]]) -> dict[str, Any]:
     if not section:
-        return None
+        raise ValueError("Generated section is empty")
     try:
         return LessonSection.model_validate(section).model_dump()
-    except ValidationError:
-        return None
+    except ValidationError as error:
+        title = section.get("title") if isinstance(section, dict) else None
+        section_name = title if isinstance(title, str) and title.strip() else "untitled"
+        raise ValueError(f"Section '{section_name}' failed final validation: {error}") from error
 
 
 async def generate_sections(request_data: GenerateSectionsRequest) -> dict[str, Any]:
@@ -1182,8 +1132,20 @@ async def generate_sections(request_data: GenerateSectionsRequest) -> dict[str, 
             "status": "error",
             "message": str(error),
         }
+    except Exception as error:
+        logger.exception("Unexpected section generation failure")
+        return {
+            "status": "error",
+            "message": str(error),
+        }
 
-    parsed_sections = [section for section in (_section_or_none(section) for section in sections) if section]
+    try:
+        parsed_sections = [_validate_section_or_raise(section) for section in sections]
+    except ValueError as error:
+        return {
+            "status": "error",
+            "message": str(error),
+        }
 
     if not parsed_sections:
         parsed_sections = [

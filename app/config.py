@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     MAX_GENERATION_ATTEMPTS: int = 3
     GROQ_MAX_TOKENS: int = 4096
     AUDIO_GENERATION_TIMEOUT_SECONDS: int = 60
+    IMAGE_GENERATION_TIMEOUT_SECONDS: int = 60
 
     def model_pool(self) -> list[str]:
         models = [model.strip() for model in self.MODEL_POOL.split(",") if model.strip()]
