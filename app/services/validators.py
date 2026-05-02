@@ -10,6 +10,7 @@ from app.schemas import GeneratedTask, LessonSection, TestTask
 GeneratedTaskAdapter = TypeAdapter(GeneratedTask)
 LessonSectionAdapter = TypeAdapter(LessonSection)
 GAP_PATTERN = re.compile(r"_{3,}")
+MARKDOWN_HEADING_PATTERN = re.compile(r"^\s*#+\s+(.+?)\s*#*\s*$")
 
 
 def count_gaps(text: str) -> int:
@@ -26,6 +27,21 @@ def materialize_fill_gaps_text(text: str, answers: list[str]) -> str:
         return f"{{{{{value}}}}}"
 
     return GAP_PATTERN.sub(replacer, text)
+
+
+def normalize_markdown_headings(text: str) -> str:
+    lines: list[str] = []
+    for line in text.splitlines():
+        match = MARKDOWN_HEADING_PATTERN.match(line)
+        if not match:
+            lines.append(line)
+            continue
+
+        title = match.group(1).strip()
+        if title:
+            lines.extend(["", f"**{title}**", ""])
+
+    return "\n".join(lines).strip()
 
 
 def shuffle_test_options(task: dict[str, Any]) -> dict[str, Any]:
@@ -113,6 +129,10 @@ def validate_generated_task(task: dict[str, Any]) -> tuple[bool, Optional[str], 
         if not is_valid:
             return False, error_message, None
         task_data["text"] = materialize_fill_gaps_text(task_data["text"], task_data["answers"])
+        task_data["text"] = normalize_markdown_headings(task_data["text"])
+
+    if task_data["type"] == "note":
+        task_data["content"] = normalize_markdown_headings(task_data["content"])
 
     if task_data["type"] == "audio":
         is_valid, error_message = validate_audio_task(task_data)

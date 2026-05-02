@@ -5,6 +5,7 @@ from app.schemas import GenerateStyleRequest, ImproveBriefRequest, LessonBrief
 from app.services.brief_generator import build_brief_prompt, build_improve_brief_prompt
 from app.services.sections_generator import (
     build_comprehension_task_prompt,
+    build_grammar_sections_prompt,
     build_grammar_tasks_prompt,
     build_reading_text_prompt,
     build_vocabulary_tasks_prompt,
@@ -87,6 +88,16 @@ def test_grammar_prompt_requires_closed_gaps_with_base_words_in_text() -> None:
     assert "base words directly in text" in prompt
     assert "One gap per sentence is recommended" in prompt
     assert "minimal explanations" in prompt
+
+
+def test_grammar_sections_prompt_asks_ai_to_decide_split_with_examples() -> None:
+    prompt = build_grammar_sections_prompt("Present Continuous", ["Present Continuous"])
+
+    assert "Decide whether the grammar should be split" in prompt
+    assert "Use the examples only as decision examples" in prompt
+    assert "Present Continuous may be split" in prompt
+    assert "First Conditional may stay as one section" in prompt
+    assert "return exactly the sections you recommend" in prompt
 
 
 def test_comprehension_prompt_forbids_model_shuffle() -> None:

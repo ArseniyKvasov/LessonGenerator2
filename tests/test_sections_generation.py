@@ -22,6 +22,12 @@ def test_generate_sections_runs_independent_sections_concurrently(monkeypatch) -
             {"title": "Vocabulary B", "words": vocabulary[4:]},
         ]
 
+    async def split_grammar(topic: str, grammar: list[str]) -> list[dict]:
+        return [
+            {"title": item, "points": [item]}
+            for item in grammar
+        ]
+
     async def generate_vocabulary_section(topic: str, group: dict) -> dict:
         return await wait_and_return(group["title"])
 
@@ -38,6 +44,7 @@ def test_generate_sections_runs_independent_sections_concurrently(monkeypatch) -
         return await wait_and_return(speaking_title)
 
     monkeypatch.setattr(sections_generator, "_split_vocabulary", split_vocabulary)
+    monkeypatch.setattr(sections_generator, "_split_grammar", split_grammar)
     monkeypatch.setattr(sections_generator, "_generate_vocabulary_section", generate_vocabulary_section)
     monkeypatch.setattr(sections_generator, "_generate_grammar_section", generate_grammar_section)
     monkeypatch.setattr(sections_generator, "_generate_reading_section", generate_reading_section)
@@ -69,4 +76,26 @@ def test_generate_sections_runs_independent_sections_concurrently(monkeypatch) -
         "Reading Practice",
         "Writing Practice",
         "Speaking Practice",
+    ]
+
+
+def test_split_grammar_uses_ai_section_plan(monkeypatch) -> None:
+    async def call_ai(prompt_builder, validator, **kwargs):
+        is_valid, error, sections = validator(
+            {
+                "sections": [
+                    {"title": "AI Section A", "points": ["AI point A"]},
+                    {"title": "AI Section B", "points": ["AI point B"]},
+                ]
+            }
+        )
+        return is_valid, error, sections
+
+    monkeypatch.setattr(sections_generator, "_call_ai", call_ai)
+
+    sections = asyncio.run(sections_generator._split_grammar("Any Grammar", ["Present Continuous"]))
+
+    assert sections == [
+        {"title": "AI Section A", "points": ["AI point A"]},
+        {"title": "AI Section B", "points": ["AI point B"]},
     ]

@@ -64,7 +64,7 @@ def _short_title(value: str, fallback: str = "Grammar") -> str:
     title = re.sub(r"[^A-Za-zА-Яа-я0-9+/' -]+", "", value).strip()
     if not title:
         return fallback
-    return " ".join(title.split()[:4])[:80]
+    return " ".join(title.split()[:4])[:60]
 
 
 def _balanced_chunks(items: list[str], max_size: int = 12) -> list[list[str]]:
@@ -197,10 +197,10 @@ def build_vocabulary_tasks_prompt(
             "word_list must map each exact English word or phrase to a Russian translation.",
             "fill_gaps must use mode=open.",
             "fill_gaps must contain 4-10 gaps marked as ____ or ___.",
+            "fill_gaps must include \\n.",
             "One gap per sentence is recommended for clarity.",
             "fill_gaps answers must use only exact words or phrases from vocabulary.",
             "fill_gaps answers must be in the same order as gaps in the text.",
-            "Do not ask AI to choose from extra options; the vocabulary list is fixed.",
             "match_cards must use phrase matching or word-definition matching.",
             "Tasks must be useful for a one-on-one ESL lesson.",
         ],
@@ -271,31 +271,101 @@ async def _generate_vocabulary_section(topic: str, group: dict[str, Any]) -> dic
     }
 
 
-def _split_grammar(grammar: list[str]) -> list[dict[str, Any]]:
+def _fallback_grammar_sections(grammar: list[str]) -> list[dict[str, Any]]:
     if not grammar:
         return []
 
-    if len(grammar) > 1:
-        return [
-            {"title": _short_title(item), "points": [item]}
-            for item in grammar
-        ]
+    return [
+        {"title": _short_title(item), "points": [item]}
+        for item in grammar
+    ]
 
-    topic = grammar[0]
-    normalized = topic.casefold()
-    if "present continuous" in normalized:
-        return [
-            {"title": "Word Markers", "points": ["now", "right now", "at the moment", "today"]},
-            {"title": "Affirmative", "points": ["am/is/are + verb-ing", "I am working", "She is reading", "They are talking"]},
-            {"title": "Negative", "points": ["am/is/are + not + verb-ing", "I am not working", "He is not sleeping"]},
-            {"title": "Questions", "points": ["am/is/are before the subject", "Are you working?", "What is she doing?"]},
-            {"title": "All Together", "points": ["mix affirmative, negative, and questions in short contexts"]},
-        ]
 
-    if "first conditional" in normalized:
-        return [{"title": "First Conditional", "points": ["if + Present Simple", "will + base verb", "real future result"]}]
+def build_grammar_sections_prompt(
+    topic: str,
+    grammar: list[str],
+    previous_error: Optional[str] = None,
+) -> str:
+    payload = {
+        "topic": topic,
+        "grammar": grammar,
+        "task": "Decide whether the grammar should be split into multiple lesson sections before task generation.",
+        "rules": [
+            "Return only valid JSON.",
+            "Use the examples only as decision examples, not as hard-coded rules.",
+            "Example: Present Continuous may be split into signal words, affirmative, negative, questions, and mixed practice.",
+            "Example: First Conditional may stay as one section or be split if the lesson scope needs it.",
+            "If splitting is useful, return exactly the sections you recommend.",
+            "If splitting is not useful, return one section per coherent grammar focus.",
+            "Do not add unrelated grammar.",
+            "Each section title must be short and classroom-friendly.",
+            "Each points array must list the exact sub-points this section should teach or practice.",
+        ],
+        "response_schema": {
+            "sections": [
+                {
+                    "title": "string",
+                    "points": ["grammar point or sub-point"],
+                }
+            ]
+        },
+    }
+    return _dump_prompt(payload, previous_error)
 
-    return [{"title": _short_title(topic), "points": [topic]}]
+
+def _validate_grammar_sections_factory(grammar: list[str]) -> JsonValidator:
+    def validator(data: dict[str, Any]) -> tuple[bool, Optional[str], Optional[Any]]:
+        sections = data.get("sections")
+        if not isinstance(sections, list) or not sections:
+            return False, "sections must be a non-empty list", None
+        if len(sections) > 10:
+            return False, "Grammar plan must contain no more than 10 sections", None
+
+        parsed_sections: list[dict[str, Any]] = []
+        seen_titles: set[str] = set()
+        for section in sections:
+            if not isinstance(section, dict):
+                return False, "Each grammar section must be an object", None
+
+            title = section.get("title")
+            points = section.get("points")
+            if not isinstance(title, str) or not title.strip():
+                return False, "Each grammar section needs a title", None
+            clean_title = _short_title(title)
+            title_key = clean_title.casefold()
+            if title_key in seen_titles:
+                return False, "Grammar section titles must be unique", None
+            seen_titles.add(title_key)
+
+            if not isinstance(points, list) or not points:
+                return False, "Each grammar section needs a non-empty points array", None
+
+            clean_points: list[str] = []
+            for point in points:
+                if not isinstance(point, str) or not point.strip():
+                    return False, "Grammar section points must be non-empty strings", None
+                clean_points.append(point.strip())
+
+            parsed_sections.append({"title": clean_title, "points": clean_points})
+
+        return True, None, parsed_sections
+
+    return validator
+
+
+async def _split_grammar(topic: str, grammar: list[str]) -> list[dict[str, Any]]:
+    if not grammar:
+        return []
+
+    is_valid, _, sections = await _call_ai(
+        lambda previous_error: build_grammar_sections_prompt(topic, grammar, previous_error),
+        _validate_grammar_sections_factory(grammar),
+        temperature=0,
+    )
+    if is_valid and sections:
+        return sections
+
+    return _fallback_grammar_sections(grammar)
 
 
 def build_grammar_tasks_prompt(
@@ -313,9 +383,9 @@ def build_grammar_tasks_prompt(
             "Return only valid JSON.",
             "Generate note, test, and fill_gaps tasks in this order.",
             "Add word_list only if absolutely necessary, for example signal words.",
-            "note.content must be Markdown and must include at least one \\n line break.",
+            "note.content must be Markdown and must include \\n line breaks.",
             "note.content is support material for the tutor: minimal explanations, focus on examples, short comments only if necessary.",
-            "test must be multiple choice with 3-6 questions and exactly one correct option per question.",
+            "test must be multiple choice with 4-7 short and clear questions with at least one correct option per question.",
             "fill_gaps must be closed.",
             "fill_gaps must contain 4-10 gaps marked as ____ or ___.",
             "One gap per sentence is recommended for clarity.",
@@ -361,121 +431,6 @@ def _validate_grammar_tasks(data: dict[str, Any]) -> tuple[bool, Optional[str], 
     return True, None, parsed_tasks
 
 
-def _fallback_grammar_tasks(grammar_section: dict[str, Any]) -> list[dict[str, Any]]:
-    points = grammar_section["points"]
-    focus = points[0]
-
-    grammar_label = f"{grammar_section['title']} {' '.join(points)}".casefold()
-    if "conditional" in grammar_label:
-        return [
-            {
-                "type": "note",
-                "content": (
-                    f"**{grammar_section['title']}**\n\n"
-                    "Examples:\n"
-                    "1. If I have time, I will call you.\n"
-                    "2. If it rains, we will stay home.\n"
-                    "3. What will you do if the train is late?\n\n"
-                    f"Focus: {focus}"
-                ),
-            },
-            {
-                "type": "test",
-                "questions": [
-                    {
-                        "question": "Choose the correct sentence.",
-                        "options": [
-                            {"option": "If I have time, I will help.", "is_correct": True},
-                            {"option": "If I will have time, I help.", "is_correct": False},
-                            {"option": "If I had time, I help.", "is_correct": False},
-                        ],
-                    },
-                    {
-                        "question": "Choose the correct result: If it rains, we ___.",
-                        "options": [
-                            {"option": "will stay home", "is_correct": True},
-                            {"option": "stay home yesterday", "is_correct": False},
-                            {"option": "staying home", "is_correct": False},
-                        ],
-                    },
-                    {
-                        "question": "Choose the correct if-clause.",
-                        "options": [
-                            {"option": "if she finishes early", "is_correct": True},
-                            {"option": "if she will finishes early", "is_correct": False},
-                            {"option": "if she finishing early", "is_correct": False},
-                        ],
-                    },
-                ],
-            },
-            {
-                "type": "fill_gaps",
-                "mode": "closed",
-                "text": (
-                    "Complete the sentences.\n"
-                    "1. If I ___ (have) time, I will call you.\n"
-                    "2. If she studies, she ___ (pass) the test.\n"
-                    "3. If it ___ (rain), we will stay home.\n"
-                    "4. If they leave now, they ___ (arrive) early."
-                ),
-                "answers": ["have", "will pass", "rains", "will arrive"],
-            },
-        ]
-
-    return [
-        {
-            "type": "note",
-            "content": f"**{grammar_section['title']}**\n\nExamples:\n1. I am studying now.\n2. She is working today.\n3. Are they listening?\n\nFocus: {focus}",
-        },
-        {
-            "type": "test",
-            "questions": [
-                {
-                    "question": "Choose the correct sentence.",
-                    "options": [
-                        {"option": "She is working now.", "is_correct": True},
-                        {"option": "She working now.", "is_correct": False},
-                        {"option": "She work now.", "is_correct": False},
-                    ],
-                },
-                {
-                    "question": "Choose the correct form: They ___ English.",
-                    "options": [
-                        {"option": "are learning", "is_correct": True},
-                        {"option": "is learning", "is_correct": False},
-                        {"option": "learning", "is_correct": False},
-                    ],
-                },
-                {
-                    "question": "Choose the correct question.",
-                    "options": [
-                        {"option": "What are you doing?", "is_correct": True},
-                        {"option": "What you are doing?", "is_correct": False},
-                        {"option": "What do you doing?", "is_correct": False},
-                    ],
-                },
-            ],
-        },
-        {
-            "type": "fill_gaps",
-            "mode": "closed",
-            "text": (
-                "Complete the sentences.\n"
-                "1. I ___ (study) now.\n"
-                "2. She ___ (work) today.\n"
-                "3. They ___ (listen) at the moment.\n"
-                "4. We ___ (wait) for the teacher."
-            ),
-            "answers": ["am studying", "is working", "are listening", "are waiting"],
-        },
-    ]
-
-
-def _has_supported_grammar_fallback(full_grammar: list[str]) -> bool:
-    normalized = " ".join(full_grammar).casefold()
-    return "present continuous" in normalized or "first conditional" in normalized
-
-
 async def _generate_grammar_section(topic: str, grammar_section: dict[str, Any], full_grammar: list[str]) -> dict[str, Any]:
     is_valid, error_message, tasks = await _call_ai(
         lambda previous_error: build_grammar_tasks_prompt(topic, grammar_section, full_grammar, previous_error),
@@ -483,9 +438,7 @@ async def _generate_grammar_section(topic: str, grammar_section: dict[str, Any],
         temperature=0,
     )
     if not is_valid or not tasks:
-        if not _has_supported_grammar_fallback(full_grammar):
-            raise ValueError(error_message or "Could not generate valid grammar tasks")
-        tasks = _fallback_grammar_tasks(grammar_section)
+        raise ValueError(error_message or "Could not generate valid grammar tasks")
 
     return {
         "title": grammar_section["title"],
@@ -1025,9 +978,10 @@ async def generate_sections(request_data: GenerateSectionsRequest) -> dict[str, 
             for group in vocabulary_groups
         ]
 
+        grammar_sections = await _split_grammar(topic, request_data.brief.grammar)
         section_tasks.extend(
             _generate_grammar_section(topic, grammar_section, request_data.brief.grammar)
-            for grammar_section in _split_grammar(request_data.brief.grammar)
+            for grammar_section in grammar_sections
         )
 
         skill_titles = {

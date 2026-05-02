@@ -124,6 +124,43 @@ def test_generated_fill_gaps_contains_materialized_gaps() -> None:
     assert "{{are waiting}}" in parsed["text"]
 
 
+def test_generated_note_normalizes_markdown_heading_lines() -> None:
+    is_valid, error, parsed = validate_generated_task(
+        {
+            "type": "note",
+            "content": "Intro\n### Example\nUse it like this.\n# Practice",
+        }
+    )
+
+    assert is_valid, error
+    assert parsed is not None
+    assert "### Example" not in parsed["content"]
+    assert "# Practice" not in parsed["content"]
+    assert parsed["content"] == "Intro\n\n**Example**\n\nUse it like this.\n\n**Practice**"
+
+
+def test_generated_fill_gaps_normalizes_markdown_heading_lines() -> None:
+    is_valid, error, parsed = validate_generated_task(
+        {
+            "type": "fill_gaps",
+            "mode": "closed",
+            "text": (
+                "#### Example\n"
+                "He ___ (cook) dinner now.\n"
+                "They ___ (study) at home.\n"
+                "I ___ (drink) tea.\n"
+                "We ___ (wait) outside."
+            ),
+            "answers": ["is cooking", "are studying", "am drinking", "are waiting"],
+        }
+    )
+
+    assert is_valid, error
+    assert parsed is not None
+    assert "#### Example" not in parsed["text"]
+    assert parsed["text"].startswith("**Example**\n\nHe {{is cooking}}")
+
+
 def test_extracts_groq_retry_time_from_composite_message() -> None:
     seconds = extract_retry_after_seconds("Rate limit reached. Please try again in 34m3.36s. Need more tokens?")
 
