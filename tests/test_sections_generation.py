@@ -138,3 +138,49 @@ def test_split_grammar_uses_ai_section_plan(monkeypatch) -> None:
         {"title": "AI Section A", "points": ["AI point A"]},
         {"title": "AI Section B", "points": ["AI point B"]},
     ]
+
+
+def test_grammar_tasks_accept_note_without_line_break() -> None:
+    is_valid, error, tasks = sections_generator._validate_grammar_tasks(
+        {
+            "tasks": [
+                {"type": "note", "content": "Use am, is, or are before the -ing verb."},
+                {
+                    "type": "test",
+                    "questions": [
+                        {
+                            "question": "Choose the correct sentence.",
+                            "options": [
+                                {"option": "She is reading.", "is_correct": True},
+                                {"option": "She are reading.", "is_correct": False},
+                            ],
+                        },
+                        {
+                            "question": "Choose the correct sentence.",
+                            "options": [
+                                {"option": "They are cooking.", "is_correct": True},
+                                {"option": "They is cooking.", "is_correct": False},
+                            ],
+                        },
+                        {
+                            "question": "Choose the correct sentence.",
+                            "options": [
+                                {"option": "I am waiting.", "is_correct": True},
+                                {"option": "I is waiting.", "is_correct": False},
+                            ],
+                        },
+                    ],
+                },
+                {
+                    "type": "fill_gaps",
+                    "mode": "closed",
+                    "text": "She ___ (read) now. They ___ (cook) dinner. I ___ (wait) here. He ___ (run) fast.",
+                    "answers": ["is reading", "are cooking", "am waiting", "is running"],
+                },
+            ]
+        }
+    )
+
+    assert is_valid is True
+    assert error is None
+    assert tasks[0]["content"] == "Use am, is, or are before the -ing verb."

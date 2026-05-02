@@ -73,6 +73,7 @@ def test_vocabulary_tasks_prompt_uses_fixed_list_and_open_gaps() -> None:
     prompt = build_vocabulary_tasks_prompt("Travel English", ["ticket", "platform", "delay", "gate"])
 
     assert "fill_gaps must use mode=open" in prompt
+    assert "line breaks" in prompt
     assert "use only exact words" in prompt
     assert "ticket" in prompt
 
@@ -86,6 +87,7 @@ def test_grammar_prompt_requires_closed_gaps_with_base_words_in_text() -> None:
 
     assert "fill_gaps must be closed" in prompt
     assert "base words directly in text" in prompt
+    assert "fill_gaps.text should include line breaks" in prompt
     assert "One gap per sentence is recommended" in prompt
     assert "minimal explanations" in prompt
 

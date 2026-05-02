@@ -197,7 +197,7 @@ def build_vocabulary_tasks_prompt(
             "word_list must map each exact English word or phrase to a Russian translation.",
             "fill_gaps must use mode=open.",
             "fill_gaps must contain 4-10 gaps marked as ____ or ___.",
-            "fill_gaps must include \\n.",
+            "fill_gaps.text should include line breaks (\\n) between sentences.",
             "One gap per sentence is recommended for clarity.",
             "fill_gaps answers must use only exact words or phrases from vocabulary.",
             "fill_gaps answers must be in the same order as gaps in the text.",
@@ -404,12 +404,13 @@ def build_grammar_tasks_prompt(
             "Return only valid JSON.",
             "Generate note, test, and fill_gaps tasks in this order.",
             "Add word_list only if absolutely necessary, for example signal words.",
-            "note.content must actively use Markdown and must include \\n line breaks.",
+            "note.content should use Markdown and line breaks (\\n) between explanation and examples.",
             "note.content is support material for the tutor: minimal explanations, focus on examples, short comments only if necessary.",
             "test must be multiple choice with 4-7 very short and clear questions with at least one correct option per question.",
             "Use exactly the same format for every question.",
             "fill_gaps must be closed.",
             "fill_gaps must contain 4-10 gaps marked as ____ or ___.",
+            "fill_gaps.text should include line breaks (\\n) between sentences.",
             "One gap per sentence is recommended for clarity.",
             "fill_gaps answers must be in the same order as gaps in the text.",
             "For closed fill_gaps, include base words directly in text, for example: He ___ (cook) dinner now.",
@@ -417,9 +418,9 @@ def build_grammar_tasks_prompt(
         ],
         "response_schema": {
             "tasks": [
-                {"type": "note", "content": "Markdown with \\n line breaks"},
+                {"type": "note", "content": "Markdown text with line breaks"},
                 {"type": "test", "questions": [{"question": "string", "options": [{"option": "string", "is_correct": True}]}]},
-                {"type": "fill_gaps", "mode": "closed", "text": "Text with ___ gaps and optional base words in parentheses", "answers": ["answer in gap order"]},
+                {"type": "fill_gaps", "mode": "closed", "text": "Text with ___ gaps, \\n line breaks, and optional base words in parentheses", "answers": ["answer in gap order"]},
             ]
         },
     }
@@ -444,8 +445,6 @@ def _validate_grammar_tasks(data: dict[str, Any]) -> tuple[bool, Optional[str], 
         is_valid, error_message, parsed = validate_generated_task(task)
         if not is_valid or not parsed:
             return False, error_message, None
-        if parsed["type"] == "note" and "\n" not in parsed["content"]:
-            return False, "Grammar note must include a line break", None
         if parsed["type"] == "fill_gaps" and parsed["mode"] != "closed":
             return False, "Grammar fill_gaps must be closed", None
         parsed_tasks.append(parsed)
