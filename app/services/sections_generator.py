@@ -271,19 +271,40 @@ async def _generate_vocabulary_section(topic: str, group: dict[str, Any]) -> dic
     }
 
 
-def _fallback_grammar_sections(grammar: list[str]) -> list[dict[str, Any]]:
+def _grammar_item_topic(item: Any) -> str:
+    if isinstance(item, dict):
+        topic = item.get("topic")
+        if isinstance(topic, str) and topic.strip():
+            return topic.strip()
+    if hasattr(item, "topic") and isinstance(item.topic, str):
+        return item.topic.strip()
+    return str(item).strip()
+
+
+def _grammar_item_points(item: Any) -> list[str]:
+    if isinstance(item, dict):
+        points = item.get("points")
+        if isinstance(points, list):
+            return [point.strip() for point in points if isinstance(point, str) and point.strip()]
+    if hasattr(item, "points") and isinstance(item.points, list):
+        return [point.strip() for point in item.points if isinstance(point, str) and point.strip()]
+    topic = _grammar_item_topic(item)
+    return [topic] if topic else []
+
+
+def _fallback_grammar_sections(grammar: list[Any]) -> list[dict[str, Any]]:
     if not grammar:
         return []
 
     return [
-        {"title": _short_title(item), "points": [item]}
+        {"title": _short_title(_grammar_item_topic(item)), "points": _grammar_item_points(item)}
         for item in grammar
     ]
 
 
 def build_grammar_sections_prompt(
     topic: str,
-    grammar: list[str],
+    grammar: list[Any],
     previous_error: Optional[str] = None,
 ) -> str:
     payload = {
@@ -313,7 +334,7 @@ def build_grammar_sections_prompt(
     return _dump_prompt(payload, previous_error)
 
 
-def _validate_grammar_sections_factory(grammar: list[str]) -> JsonValidator:
+def _validate_grammar_sections_factory(grammar: list[Any]) -> JsonValidator:
     def validator(data: dict[str, Any]) -> tuple[bool, Optional[str], Optional[Any]]:
         sections = data.get("sections")
         if not isinstance(sections, list) or not sections:
@@ -353,7 +374,7 @@ def _validate_grammar_sections_factory(grammar: list[str]) -> JsonValidator:
     return validator
 
 
-async def _split_grammar(topic: str, grammar: list[str]) -> list[dict[str, Any]]:
+async def _split_grammar(topic: str, grammar: list[Any]) -> list[dict[str, Any]]:
     if not grammar:
         return []
 
@@ -371,7 +392,7 @@ async def _split_grammar(topic: str, grammar: list[str]) -> list[dict[str, Any]]
 def build_grammar_tasks_prompt(
     topic: str,
     grammar_section: dict[str, Any],
-    full_grammar: list[str],
+    full_grammar: list[Any],
     previous_error: Optional[str] = None,
 ) -> str:
     payload = {
@@ -383,9 +404,10 @@ def build_grammar_tasks_prompt(
             "Return only valid JSON.",
             "Generate note, test, and fill_gaps tasks in this order.",
             "Add word_list only if absolutely necessary, for example signal words.",
-            "note.content must be Markdown and must include \\n line breaks.",
+            "note.content must actively use Markdown and must include \\n line breaks.",
             "note.content is support material for the tutor: minimal explanations, focus on examples, short comments only if necessary.",
-            "test must be multiple choice with 4-7 short and clear questions with at least one correct option per question.",
+            "test must be multiple choice with 4-7 very short and clear questions with at least one correct option per question.",
+            "Use exactly the same format for every question.",
             "fill_gaps must be closed.",
             "fill_gaps must contain 4-10 gaps marked as ____ or ___.",
             "One gap per sentence is recommended for clarity.",
@@ -431,7 +453,7 @@ def _validate_grammar_tasks(data: dict[str, Any]) -> tuple[bool, Optional[str], 
     return True, None, parsed_tasks
 
 
-async def _generate_grammar_section(topic: str, grammar_section: dict[str, Any], full_grammar: list[str]) -> dict[str, Any]:
+async def _generate_grammar_section(topic: str, grammar_section: dict[str, Any], full_grammar: list[Any]) -> dict[str, Any]:
     is_valid, error_message, tasks = await _call_ai(
         lambda previous_error: build_grammar_tasks_prompt(topic, grammar_section, full_grammar, previous_error),
         _validate_grammar_tasks,
@@ -488,7 +510,7 @@ def _fallback_reading_text(topic: str, brief: dict[str, Any], reading_title: str
     vocabulary = brief.get("vocabulary") or []
     grammar = brief.get("grammar") or []
     words = ", ".join(vocabulary[:4]) if vocabulary else "simple English phrases"
-    grammar_focus = grammar[0] if grammar else "clear sentences"
+    grammar_focus = _grammar_item_topic(grammar[0]) if grammar else "clear sentences"
     return (
         f"**{reading_title}**\n\n"
         f"Mira has a short English lesson today. She practices {words}. "
@@ -510,9 +532,8 @@ def build_comprehension_task_prompt(
         "rules": [
             "Return only valid JSON.",
             "Do not use information outside exact_text.",
-            "For test, generate 3-6 questions with exactly one correct option per question.",
+            "For test, generate 4-7 short and clear questions with exactly one correct option per question.",
             "For true_false, generate 3-6 statements.",
-            "Do not shuffle answer options; the application will shuffle them programmatically.",
         ],
         "response_schema": {
             "task": {"type": task_type}
@@ -638,12 +659,10 @@ def build_listening_script_prompt(
             "Return only valid JSON.",
             "Use vocabulary and grammar from the brief, but only a small relevant part of them.",
             "Match the likely ESL level implied by the brief.",
-            "Script must be 3000 characters or fewer.",
             "Choose monologue or dialogue.",
             "For monologue, use one script item with speaker Narrator.",
             "For dialogue, use at least two speakers.",
             "Keep the script aligned with listening_title.",
-            "Do not add comprehension tasks here.",
         ],
         "response_schema": {
             "audio_type": "monologue | dialogue",
@@ -741,13 +760,32 @@ def build_writing_prompt(
         "task": "Generate a writing task for a one-on-one ESL lesson.",
         "rules": [
             "Return only valid JSON.",
-            "instruction must be one sentence.",
-            "instruction must briefly list what must be included.",
-            "Do not include examples.",
-            "instruction must use Markdown and include at least one \\n line break.",
             "Use writing_title as the writing topic. Do not invent another title.",
+            "instruction must be a Markdown string.",
+            "instruction must contain exactly two parts separated by at least one \\n line break.",
+            "Part 1 must be one short sentence with the main writing task.",
+            "Part 1 must start with an action verb such as Write, Describe, Explain, or Tell.",
+            "Part 1 must be italicized with Markdown using *...*.",
+            "Part 2 must start with the italicized line *You should include:*.",
+            "After *You should include:*, add 3-5 bullet points.",
+            "Each bullet point must be a short question or phrase describing what the student should include.",
+            "Bullet points must be directly connected to writing_title, vocabulary, grammar, and lesson topic.",
+            "Do not include a sample answer.",
+            "Do not include examples.",
         ],
-        "response_schema": {"instruction": "Markdown string"},
+        "format_example": (
+            "*Write a short message about your last trip.*\n\n"
+            "*You should include:*\n"
+            "- Where did you go?\n"
+            "- What did you like most?\n"
+            "- Would you like to visit that place again?"
+        ),
+        "response_schema": {
+            "instruction": (
+                "Markdown string with one main writing sentence, then '*You should include:*', "
+                "then 3-5 bullet points"
+            )
+        },
     }
     return _dump_prompt(payload, previous_error)
 
@@ -795,7 +833,7 @@ def build_speaking_prompt(
             "Return only valid JSON.",
             "Choose either Option A image + speaking questions or Option B speaking questions only.",
             "Use an image only if it clearly supports the speaking task.",
-            "Generate 3-5 speaking questions.",
+            "Generate 3-5 short and clear speaking questions.",
             "Questions must help the student produce English using the lesson vocabulary or grammar.",
             "Keep the questions aligned with speaking_title.",
             "If use_image=true, image_description must be a detailed visual prompt.",

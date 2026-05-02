@@ -37,7 +37,7 @@ def test_improve_brief_prompt_preserves_existing_skill_titles() -> None:
         )
     )
 
-    assert "Modify only what is needed" in prompt
+    assert "Only modify fields that are clearly requested" in prompt
     assert "Station Role Play" in prompt
     assert "add more vocabulary" in prompt
 
@@ -100,11 +100,11 @@ def test_grammar_sections_prompt_asks_ai_to_decide_split_with_examples() -> None
     assert "return exactly the sections you recommend" in prompt
 
 
-def test_comprehension_prompt_forbids_model_shuffle() -> None:
+def test_comprehension_prompt_uses_exact_text() -> None:
     prompt = build_comprehension_task_prompt("A short text.", "test")
 
     assert "exact_text" in prompt
-    assert "Do not shuffle answer options" in prompt
+    assert "using only the exact text provided" in prompt
 
 
 def test_style_prompt_restricts_color_and_icon_lists() -> None:

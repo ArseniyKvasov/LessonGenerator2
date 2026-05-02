@@ -24,7 +24,7 @@ def test_generate_sections_runs_independent_sections_concurrently(monkeypatch) -
 
     async def split_grammar(topic: str, grammar: list[str]) -> list[dict]:
         return [
-            {"title": item, "points": [item]}
+            {"title": getattr(item, "topic", item), "points": getattr(item, "points", [item])}
             for item in grammar
         ]
 

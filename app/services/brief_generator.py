@@ -29,6 +29,13 @@ PRACTICAL_SKILL_SCHEMA = [
     }
 ]
 
+GRAMMAR_SCHEMA = [
+    {
+        "topic": "one real grammar structure",
+        "points": ["short grammar subpoint, 1-5 words"],
+    }
+]
+
 
 def build_brief_prompt(user_request: str, previous_error: Optional[str] = None) -> str:
     payload = {
@@ -47,16 +54,27 @@ def build_brief_prompt(user_request: str, previous_error: Optional[str] = None) 
             "Do not add explanations outside JSON.",
             "Do not shorten the brief.",
             "topic must contain 2-4 words.",
+
             "brief.lesson_goal must be detailed and specific.",
             "brief.lesson_goal must explain what the student should be able to do by the end of the lesson.",
+
             "brief.vocabulary must contain only vocabulary that is truly relevant to the request.",
-            "brief.grammar must contain only grammar that is truly relevant to the request.",
-            "If the request is clearly vocabulary-only, brief.grammar must be an empty array.",
             "If the request is clearly grammar-only, brief.vocabulary must be an empty array.",
-            "If the user provides a vocabulary list and does not ask for grammar, do not invent grammar.",
             "If the user provides grammar and does not ask for vocabulary, do not invent vocabulary.",
-            "Grammar items must be real grammar structures.",
+
+            "brief.grammar must contain only grammar explicitly requested by the user.",
+            "If the user request does not explicitly ask for grammar, brief.grammar must be an empty array.",
+            "If grammar is requested, brief.grammar must contain exactly 1 grammar topic by default.",
+            "Generate more than 1 grammar topic only if the user explicitly asks for several grammar topics.",
+            "Each grammar item must be an object with topic and points.",
+            "grammar.topic must be one real grammar structure.",
+            "grammar.points must contain 1-4 short subpoints that explain what to cover inside this grammar topic.",
+            "Do not put grammar subpoints as separate grammar topics.",
+            "Example: use topic='Present Continuous' with points=['word markers', 'form'], not separate grammar items.",
+            "Do not add grammar just because it is useful for the topic.",
+
             "Do not add irrelevant content.",
+
             "brief.practical_skills must contain only skills that are useful for this lesson.",
             "Use only 1-3 practical skills.",
             "brief.practical_skills must be an array of objects: {type, title}.",
@@ -69,7 +87,7 @@ def build_brief_prompt(user_request: str, previous_error: Optional[str] = None) 
             "brief": {
                 "lesson_goal": "detailed string",
                 "vocabulary": ["string"],
-                "grammar": ["string"],
+                "grammar": GRAMMAR_SCHEMA,
                 "practical_skills": PRACTICAL_SKILL_SCHEMA,
             },
         },
@@ -101,23 +119,44 @@ def build_improve_brief_prompt(
             "You are an ESL methodologist. Preserve useful existing content, "
             "but carefully update the brief where the user request requires it."
         ),
+        "change_scope": (
+            "Detect which fields the user wants to change: "
+            "topic, lesson_goal, vocabulary, grammar, practical_skills. "
+            "Only modify those fields. Preserve all other fields exactly."
+        ),
         "rules": [
             "Return only valid JSON.",
             "Do not add markdown.",
             "Do not add explanations outside JSON.",
             "Do not shorten the brief.",
             "topic must remain 2-4 words.",
-            "Modify only what is needed.",
-            "Preserve useful existing content.",
-            "Do not blindly rewrite everything.",
-            "Do not add irrelevant content.",
+
+            "Determine the intended change scope from improvement_request.",
+            "Only modify fields that are clearly requested by improvement_request.",
+            "Fields outside the intended change scope must be copied exactly from the input brief.",
+            "Do not change unrelated fields.",
+
+            "If improvement_request asks to improve only grammar, preserve topic, vocabulary, and practical_skills exactly unchanged.",
+            "If improvement_request asks to improve only vocabulary, preserve topic, grammar, and practical_skills exactly unchanged.",
+            "If improvement_request asks to improve only practical skills, preserve topic, vocabulary, and grammar exactly unchanged.",
+            "Do not remove, shorten, replace, or reorder existing vocabulary unless improvement_request explicitly asks to change vocabulary.",
+            "Do not remove, shorten, replace, or reorder existing grammar unless improvement_request explicitly asks to change grammar.",
+
             "Keep vocabulary, grammar, practical_skills, and lesson_goal consistent with each other.",
-            "brief.lesson_goal must be detailed and specific.",
+            "brief.lesson_goal must be specific. Write in 1 sentence.",
+
             "brief.vocabulary must contain only vocabulary that is truly relevant to the request.",
-            "brief.grammar must contain only grammar that is truly relevant to the request.",
-            "If the improved brief becomes vocabulary-only, brief.grammar must be an empty array.",
-            "If the improved brief becomes grammar-only, brief.vocabulary must be an empty array.",
-            "Grammar items must be real grammar structures.",
+
+            "brief.grammar must contain only grammar explicitly requested by the user.",
+            "If grammar is not explicitly requested and the existing brief has no grammar, brief.grammar must be an empty array.",
+            "If grammar is requested, brief.grammar must contain exactly 1 grammar topic by default.",
+            "Generate more than 1 grammar topic only if the user explicitly asks for several grammar topics.",
+            "Each grammar item must be an object with topic and points.",
+            "grammar.topic must be one real grammar structure.",
+            "grammar.points must contain 1-4 short subpoints that explain what to cover inside this grammar topic.",
+            "Do not put grammar subpoints as separate grammar topics.",
+            "Example: use topic='Present Continuous' with points=['word markers', 'form'], not separate grammar items.",
+
             "brief.practical_skills must contain only skills that are useful for this lesson.",
             "Use only 1-3 practical skills.",
             "brief.practical_skills must be an array of objects: {type, title}.",
@@ -130,7 +169,7 @@ def build_improve_brief_prompt(
             "brief": {
                 "lesson_goal": "detailed string",
                 "vocabulary": ["string"],
-                "grammar": ["string"],
+                "grammar": GRAMMAR_SCHEMA,
                 "practical_skills": PRACTICAL_SKILL_SCHEMA,
             },
         },
@@ -144,6 +183,124 @@ def build_improve_brief_prompt(
         )
 
     return json.dumps(payload, ensure_ascii=False, indent=2)
+
+
+def detect_improvement_scope(improvement_request: str) -> set[str]:
+    """
+    Detects which brief fields the user explicitly wants to change.
+
+    This is a conservative backend guard. It protects unrelated fields
+    when the model tries to rewrite more than the user requested.
+    """
+    text = improvement_request.lower()
+    scope = set()
+
+    topic_markers = [
+        "topic",
+        "title",
+        "тема",
+        "название",
+    ]
+    goal_markers = [
+        "goal",
+        "aim",
+        "цель",
+        "результат",
+    ]
+    vocabulary_markers = [
+        "vocabulary",
+        "words",
+        "lexis",
+        "лексика",
+        "слова",
+        "словарь",
+    ]
+    grammar_markers = [
+        "grammar",
+        "грамматика",
+        "грамматик",
+    ]
+    practical_skill_markers = [
+        "skill",
+        "skills",
+        "навык",
+        "навыки",
+        "reading",
+        "listening",
+        "writing",
+        "speaking",
+        "pronunciation",
+        "чтение",
+        "аудирование",
+        "письмо",
+        "говорение",
+        "произношение",
+    ]
+
+    if any(marker in text for marker in topic_markers):
+        scope.add("topic")
+
+    if any(marker in text for marker in goal_markers):
+        scope.add("lesson_goal")
+
+    if any(marker in text for marker in vocabulary_markers):
+        scope.add("vocabulary")
+
+    if any(marker in text for marker in grammar_markers):
+        scope.add("grammar")
+
+    if any(marker in text for marker in practical_skill_markers):
+        scope.add("practical_skills")
+
+    if not scope:
+        scope = {
+            "topic",
+            "lesson_goal",
+            "vocabulary",
+            "grammar",
+            "practical_skills",
+        }
+
+    return scope
+
+
+def protect_unchanged_brief_fields(
+    payload: dict[str, Any],
+    request_data: ImproveBriefRequest,
+) -> dict[str, Any]:
+    """
+    Restores unchanged fields after model generation.
+
+    The model may rewrite fields even when the prompt tells it not to.
+    This function makes field protection deterministic on the backend.
+    """
+    scope = detect_improvement_scope(request_data.improvement_request)
+
+    if "topic" not in scope:
+        payload["topic"] = request_data.topic
+
+    if "brief" not in payload or not isinstance(payload["brief"], dict):
+        return payload
+
+    brief = payload["brief"]
+
+    if "lesson_goal" not in scope:
+        brief["lesson_goal"] = request_data.brief.lesson_goal
+
+    if "vocabulary" not in scope:
+        brief["vocabulary"] = request_data.brief.vocabulary
+
+    if "grammar" not in scope:
+        brief["grammar"] = [
+            item.model_dump() for item in request_data.brief.grammar
+        ]
+
+    if "practical_skills" not in scope:
+        brief["practical_skills"] = [
+            item.model_dump() for item in request_data.brief.practical_skills
+        ]
+
+    return payload
 
 
 def validate_brief_response(
@@ -197,6 +354,9 @@ def validate_brief_semantics(data: dict[str, Any]) -> Optional[str]:
     if not isinstance(practical_skills, list):
         return "brief.practical_skills must be an array."
 
+    if len(grammar) > 1:
+        return "brief.grammar must contain only 1 grammar topic by default."
+
     if len(practical_skills) < 1:
         return "brief.practical_skills must contain at least 1 item."
 
@@ -207,9 +367,28 @@ def validate_brief_semantics(data: dict[str, Any]) -> Optional[str]:
         if not isinstance(item, str) or not item.strip():
             return "Every vocabulary item must be a non-empty string."
 
-    for item in grammar:
-        if not isinstance(item, str) or not item.strip():
-            return "Every grammar item must be a non-empty string."
+    for grammar_item in grammar:
+        if not isinstance(grammar_item, dict):
+            return "Every grammar item must be an object."
+
+        grammar_topic = grammar_item.get("topic")
+        grammar_points = grammar_item.get("points")
+
+        if not isinstance(grammar_topic, str) or not grammar_topic.strip():
+            return "Every grammar.topic must be a non-empty string."
+
+        if not isinstance(grammar_points, list):
+            return "Every grammar.points must be an array."
+
+        if len(grammar_points) < 1:
+            return "Every grammar.points must contain at least 1 item."
+
+        if len(grammar_points) > 4:
+            return "Every grammar.points must contain only 1-4 items."
+
+        for point in grammar_points:
+            if not isinstance(point, str) or not point.strip():
+                return "Every grammar.points item must be a non-empty string."
 
     for skill in practical_skills:
         if not isinstance(skill, dict):
@@ -285,8 +464,13 @@ async def improve_brief(request_data: ImproveBriefRequest) -> dict[str, Any]:
             previous_error = result["message"]
             continue
 
-        is_valid, error_message, payload = validate_brief_response(
+        protected_data = protect_unchanged_brief_fields(
             result["data"],
+            normalized_request,
+        )
+
+        is_valid, error_message, payload = validate_brief_response(
+            protected_data,
             response_type=ImproveBriefSuccessResponse,
         )
 

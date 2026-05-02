@@ -48,6 +48,40 @@ def _clean_string_list(values: Any) -> list[str]:
     return cleaned
 
 
+def _clean_grammar_list(values: Any) -> list[dict[str, Any]]:
+    if values is None:
+        return []
+    if not isinstance(values, list):
+        raise ValueError("Expected a list")
+
+    cleaned: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for value in values:
+        if isinstance(value, str):
+            topic = value.strip()
+            points = [topic] if topic else []
+        elif isinstance(value, dict):
+            raw_topic = value.get("topic")
+            raw_points = value.get("points")
+            if not isinstance(raw_topic, str):
+                continue
+            topic = raw_topic.strip()
+            points = _clean_string_list(raw_points)
+        else:
+            continue
+
+        if not topic:
+            continue
+
+        key = topic.casefold()
+        if key in seen:
+            continue
+        cleaned.append({"topic": topic, "points": points or [topic]})
+        seen.add(key)
+
+    return cleaned
+
+
 def topic_word_count(topic: str) -> int:
     return len(re.findall(r"[A-Za-zА-Яа-я0-9]+(?:[-'][A-Za-zА-Яа-я0-9]+)?", topic))
 
@@ -105,10 +139,25 @@ class PracticalSkillItem(BaseModel):
         return _clean_text(value)
 
 
+class GrammarItem(BaseModel):
+    topic: str = Field(min_length=1)
+    points: list[str] = Field(min_length=1, max_length=4)
+
+    @field_validator("topic")
+    @classmethod
+    def validate_topic(cls, value: str) -> str:
+        return _clean_text(value)
+
+    @field_validator("points", mode="before")
+    @classmethod
+    def clean_points(cls, values: Any) -> list[str]:
+        return _clean_string_list(values)
+
+
 class LessonBrief(BaseModel):
     lesson_goal: str = Field(min_length=1)
     vocabulary: list[str] = Field(default_factory=list)
-    grammar: list[str] = Field(default_factory=list)
+    grammar: list[GrammarItem] = Field(default_factory=list)
     practical_skills: list[PracticalSkillItem] = Field(default_factory=list)
 
     @field_validator("lesson_goal")
@@ -116,10 +165,15 @@ class LessonBrief(BaseModel):
     def validate_goal(cls, value: str) -> str:
         return _clean_text(value)
 
-    @field_validator("vocabulary", "grammar", mode="before")
+    @field_validator("vocabulary", mode="before")
     @classmethod
     def clean_lists(cls, values: Any) -> list[str]:
         return _clean_string_list(values)
+
+    @field_validator("grammar", mode="before")
+    @classmethod
+    def clean_grammar(cls, values: Any) -> list[dict[str, Any]]:
+        return _clean_grammar_list(values)
 
     @field_validator("practical_skills", mode="before")
     @classmethod
@@ -311,7 +365,7 @@ class TestQuestion(BaseModel):
 
 class TestTask(BaseModel):
     type: Literal["test"]
-    questions: list[TestQuestion] = Field(min_length=3, max_length=6)
+    questions: list[TestQuestion] = Field(min_length=3, max_length=7)
 
 
 class TrueFalseStatement(BaseModel):
